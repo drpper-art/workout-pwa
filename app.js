@@ -769,6 +769,65 @@ async function importJSON(file){
   alert("復元しました");
 }
 
+
+// ===== CSV Export =====
+function csvEscape(v){
+  const s = String(v ?? "");
+  if (/[",\n\r]/.test(s)){
+    return '"' + s.replace(/"/g,'""') + '"';
+  }
+  return s;
+}
+
+async function exportCSV(){
+  const settings = (await idbGet(STORES.settings, Keys.settings))?.value || { unitDisplay:"kg", splits: DEFAULT_SPLITS };
+  const splitNameById = new Map((settings.splits||DEFAULT_SPLITS).map(x=>[x.id,x.name]));
+  const masters = new Map((await idbAll(STORES.masters)).map(r=>[r.value.id, r.value]));
+  const workouts = (await idbAll(STORES.workouts)).map(r=>r.value).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+  const header = [
+    "date","split","exercise","exercise_id","set_no",
+    "unit","weight_input","weight_kg","reps","weak",
+    "equipment_no","setup","comment"
+  ];
+  const lines = [header.map(csvEscape).join(",")];
+
+  for (const w of workouts){
+    const date = w.date || "";
+    const splitId = w.splitId || "";
+    const splitName = splitNameById.get(splitId) || splitId;
+    const items = Array.isArray(w.items) ? w.items : [];
+    for (const it of items){
+      const m = masters.get(it.exId) || {};
+      const exName = m.name || "(不明)";
+      const unit = it.unit || settings.unitDisplay || "kg";
+      const eq = it.equipmentNo || m.equipmentNo || "";
+      const setup = it.setup || m.setup || "";
+      const comment = it.comment || m.defaultComment || "";
+      const sets = Array.isArray(it.sets) ? it.sets : [];
+      sets.forEach((s, idx)=>{
+        const wKg = s.wKg ?? "";
+        const wInput = (s.wKg == null) ? "" : (unit==="kg" ? s.wKg : kgToLb(s.wKg));
+        const reps = s.reps ?? "";
+        const weak = s.weak ? "1" : "0";
+        const row = [
+          date, splitName, exName, it.exId || "", String(idx+1),
+          unit, wInput, wKg, reps, weak,
+          eq, setup, comment
+        ];
+        lines.push(row.map(csvEscape).join(","));
+      });
+    }
+  }
+
+  const bom = "\ufeff"; // Excel対策
+  const blob = new Blob([bom + lines.join("\n")], { type:"text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `workout_daily_${todayISO()}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 // ===== Escape =====
 function escapeHtml(s){
   return String(s ?? "").replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
@@ -842,6 +901,8 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   });
 
   el("btnExport").onclick = exportJSON;
+  const btnCsv = el("btnExportCsv");
+  if (btnCsv) btnCsv.onclick = exportCSV;
   el("fileImport").addEventListener("change", async (e)=>{
     const f = e.target.files?.[0];
     if (f) await importJSON(f);
