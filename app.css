@@ -1,0 +1,170 @@
+:root{
+  --bg:#0f0f10;
+  --card:#17181a;
+  --card2:#1f2023;
+  --text:#f1f1f1;
+  --muted:#a7a7a7;
+  --line:#2b2d31;
+  --accent:#4da3ff;
+  --danger:#ff4d4d;
+  --radius:14px;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+.top{
+  position:sticky; top:0;
+  background:linear-gradient(#0f0f10, rgba(15,15,16,.92));
+  padding:14px 14px 10px;
+  border-bottom:1px solid var(--line);
+  z-index:10;
+  backdrop-filter: blur(8px);
+}
+.title{font-size:18px; font-weight:700; margin-bottom:10px;}
+.row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+.datebox{display:flex; gap:8px; align-items:center;}
+.datebox label{color:var(--muted); font-size:12px;}
+input,textarea{
+  width:100%;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:#0f1012;
+  color:var(--text);
+  outline:none;
+}
+input[type="date"]{min-width:150px;}
+textarea{resize:vertical;}
+
+.main{padding:12px 14px 120px;}
+.toolbar{display:flex; gap:10px; margin:10px 0 12px; flex-wrap:wrap;}
+.btn{
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:var(--accent);
+  color:#06111e;
+  font-weight:700;
+}
+.btn.ghost{background:transparent; color:var(--text);}
+.btn.danger{background:transparent; color:var(--danger); border-color:rgba(255,77,77,.4);}
+.filebtn{cursor:pointer; display:inline-flex; align-items:center; justify-content:center;}
+
+.seg{
+  display:inline-flex;
+  border:1px solid var(--line);
+  border-radius:999px;
+  overflow:hidden;
+}
+.seg.small .segbtn{padding:8px 10px; font-size:12px;}
+.segbtn{
+  padding:9px 12px;
+  border:0;
+  background:transparent;
+  color:var(--muted);
+  font-weight:700;
+}
+.segbtn.active{background:var(--card2); color:var(--text);}
+
+.cards{display:flex; flex-direction:column; gap:12px;}
+
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:12px;
+}
+.cardhead{display:flex; justify-content:space-between; gap:10px; align-items:flex-start;}
+.cardtitle{font-size:16px; font-weight:800; line-height:1.2;}
+.sub{color:var(--muted); font-size:12px; margin-top:6px;}
+.actions{display:flex; gap:8px;}
+.iconbtn{
+  border:1px solid var(--line);
+  background:transparent;
+  color:var(--text);
+  border-radius:12px;
+  padding:8px 10px;
+  font-weight:800;
+}
+
+.meta{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+.chip{
+  padding:7px 10px;
+  border-radius:999px;
+  background:#101114;
+  border:1px solid var(--line);
+  color:var(--muted);
+  font-size:12px;
+}
+.chip strong{color:var(--text);}
+
+.sets{margin-top:10px; display:flex; flex-direction:column; gap:8px;}
+.setrow{
+  display:grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap:8px;
+  align-items:center;
+  background:#111215;
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:8px;
+}
+.setrow .num{color:var(--muted); font-size:12px; margin-right:6px;}
+.setrow .mini{display:flex; gap:8px; align-items:center;}
+.setrow input{padding:10px 10px;}
+.flag{
+  display:flex; gap:8px; align-items:center; justify-content:flex-end;
+}
+.badge{
+  padding:7px 10px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:transparent;
+  color:var(--muted);
+  font-weight:800;
+}
+.badge.on{
+  border-color:rgba(77,163,255,.5);
+  color:var(--text);
+}
+.bottomrow{display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;}
+.hint{color:var(--muted); font-size:12px; margin-top:6px;}
+
+.dlg::backdrop{background:rgba(0,0,0,.55);}
+.dlgbox{
+  width:min(720px, 92vw);
+  border:1px solid var(--line);
+  background:var(--card);
+  border-radius:16px;
+  padding:14px;
+  color:var(--text);
+}
+.dlgbox h3{margin:6px 0 12px;}
+.dlgmenu{display:flex; gap:10px; justify-content:flex-end; padding:0; margin-top:14px;}
+.field{margin:10px 0;}
+.search{margin:6px 0 10px;}
+.picklist{display:flex; flex-direction:column; gap:8px; max-height:50vh; overflow:auto; padding-right:4px;}
+.pickitem{
+  border:1px solid var(--line);
+  background:#101114;
+  border-radius:12px;
+  padding:10px;
+}
+.pickitem .name{font-weight:800;}
+.pickitem .meta{margin-top:6px;}
+.pickitem button{margin-top:10px;}
+.history{max-height:55vh; overflow:auto; padding-right:4px;}
+.hr{
+  height:1px; background:var(--line);
+  margin:10px 0;
+}
