@@ -1,19 +1,16 @@
-# WorkoutPWA（HTTPS配信用：静的ファイル版）
+# WorkoutPWA（静的サイト版 v2）
 
-この一式は「サーバーにアップするだけ」でiPhoneのPWA（ホーム画面に追加）が動きます。
-（ASP.NET不要。純粋な静的サイトです）
+## 追加した機能
+- 種目ごとに「kg / lb」を切り替え（カード内）
+- 部位（胸/背中/足など）を自分で追加・並び替え・名前変更・削除
 
-## 置き場所（例）
-https://あなたのドメイン/workout/
+## GitHub Pages 更新方法
+1) このZIPを展開
+2) リポジトリ(workout-pwa)の直下に上書きアップロード（index.html など）
+3) iPhone側で更新が反映されない場合：
+   - ホーム画面のアプリを一度削除 → Safariで開き直し → 共有→ホーム画面に追加
+   - それでもダメなら：Safariの「設定 > Safari > 履歴とWebサイトデータを消去」
+     （※他サイトも消えます）
 
-サーバー上で `workout/` フォルダを作り、ZIPの中身を全部アップロードしてください。
-（index.html と同じ階層に app.js / app.css / sw.js / manifest.webmanifest / icons/ がある状態）
-
-## iPhone
-1) Safariで上のURLを開く（HTTPS）
-2) 共有 →「ホーム画面に追加」
-
-## 注意
-- Service Worker（sw.js）は “同じフォルダ配下” が対象範囲です。
-  例：/workout/ に置いたなら、アプリの範囲は /workout/ 以下になります。
-- .webmanifest のMIMEが合わないサーバーがあるので、同梱の .htaccess を一緒に置いてください。
+## バックアップ
+設定 → JSON書き出し（Dropboxへ保存推奨）

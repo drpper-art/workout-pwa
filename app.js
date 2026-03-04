@@ -4,7 +4,7 @@ if ("serviceWorker" in navigator) {
 }
 
 // ===== Utils =====
-const SPLITS = [
+const DEFAULT_SPLITS = [
   { id:"chest", name:"胸" },
   { id:"back",  name:"背中" },
   { id:"legs",  name:"足" }
@@ -35,7 +35,7 @@ function parseNum(s){
 
 // ===== IndexedDB tiny wrapper =====
 const DB_NAME = "workout_pwa_db";
-const DB_VER = 1;
+const DB_VER = 2;
 const STORES = {
   settings: "settings",
   masters: "masters",
@@ -63,8 +63,7 @@ async function idbGet(store, key){
   const db = await openDB();
   return new Promise((resolve,reject)=>{
     const tx = db.transaction(store,"readonly");
-    const st = tx.objectStore(store);
-    const req = st.get(key);
+    const req = tx.objectStore(store).get(key);
     req.onsuccess = ()=> resolve(req.result || null);
     req.onerror = ()=> reject(req.error);
   });
@@ -91,8 +90,7 @@ async function idbAll(store){
   const db = await openDB();
   return new Promise((resolve,reject)=>{
     const tx = db.transaction(store,"readonly");
-    const st = tx.objectStore(store);
-    const req = st.getAll();
+    const req = tx.objectStore(store).getAll();
     req.onsuccess = ()=> resolve(req.result || []);
     req.onerror = ()=> reject(req.error);
   });
@@ -109,7 +107,7 @@ const Keys = {
 
 async function getSettings(){
   const x = await idbGet(STORES.settings, Keys.settings);
-  return x?.value || { unit:"kg" };
+  return x?.value || { unitDisplay:"kg", splits: DEFAULT_SPLITS };
 }
 async function setSettings(value){
   await idbPut(STORES.settings, { key: Keys.settings, value });
@@ -140,7 +138,7 @@ async function saveTemplate(tpl){
 
 async function getWorkout(date){
   const r = await idbGet(STORES.workouts, Keys.workout(date));
-  return r?.value || { date, splitId:"chest", items: [] };
+  return r?.value || { date, splitId:null, items: [] };
 }
 async function saveWorkout(w){
   await idbPut(STORES.workouts, { key: Keys.workout(w.date), value: w });
@@ -148,16 +146,15 @@ async function saveWorkout(w){
 
 async function getHistory(exId){
   const r = await idbGet(STORES.historyByEx, Keys.history(exId));
-  return r?.value || []; // newest first
+  return r?.value || [];
 }
 async function pushHistory(exId, entry){
   const arr = await getHistory(exId);
   arr.unshift(entry);
-  const trimmed = arr.slice(0, 30);
-  await idbPut(STORES.historyByEx, { key: Keys.history(exId), value: trimmed });
+  await idbPut(STORES.historyByEx, { key: Keys.history(exId), value: arr.slice(0,30) });
 }
 
-// ===== Initial seed =====
+// ===== Seed =====
 async function ensureSeed(){
   const masters = await getAllMasters();
   if (masters.length === 0){
@@ -171,6 +168,7 @@ async function ensureSeed(){
 
     const all = await getAllMasters();
     const byName = (n)=>all.find(x=>x.name===n)?.id;
+
     await saveTemplate({ splitId:"chest", items: [
       { exId: byName("ベンチプレス"), sets: 4 },
       { exId: byName("インクラインDBプレス"), sets: 3 }
@@ -184,12 +182,19 @@ async function ensureSeed(){
       { exId: byName("レッグプレス"), sets: 4 }
     ].filter(x=>x.exId)});
   }
+
+  const s = await getSettings();
+  if (!Array.isArray(s.splits) || s.splits.length === 0){
+    s.splits = DEFAULT_SPLITS;
+    await setSettings(s);
+  }
 }
 
 // ===== UI State =====
 let state = {
+  splits: DEFAULT_SPLITS,
   splitId: "chest",
-  unit: "kg",
+  unitDisplay: "kg",
   date: todayISO(),
   workout: null,
   masters: []
@@ -198,22 +203,37 @@ let state = {
 const el = (id)=>document.getElementById(id);
 const cards = el("cards");
 
+function currentSplitName(){
+  return state.splits.find(s=>s.id===state.splitId)?.name || "";
+}
+
+function renderSplitTabs(){
+  const host = el("splitTabs");
+  if (!host) return;
+  host.innerHTML = "";
+  for (const s of state.splits){
+    const b = document.createElement("button");
+    b.className = "segbtn" + (s.id === state.splitId ? " active" : "");
+    b.textContent = s.name;
+    b.onclick = ()=> setSplit(s.id);
+    host.appendChild(b);
+  }
+}
+
 function setSplit(splitId){
   state.splitId = splitId;
-  document.querySelectorAll(".segbtn[data-split]").forEach(b=>{
-    b.classList.toggle("active", b.dataset.split === splitId);
-  });
   if (state.workout){
     state.workout.splitId = splitId;
     autosave();
-    render();
   }
+  renderSplitTabs();
+  render();
 }
 
 function unitButtonsReflect(){
   const dlg = el("dlgSettings");
   dlg.querySelectorAll(".segbtn[data-unit]").forEach(b=>{
-    b.classList.toggle("active", b.dataset.unit === state.unit);
+    b.classList.toggle("active", b.dataset.unit === state.unitDisplay);
   });
 }
 
@@ -226,9 +246,11 @@ async function autosave(){
     const entry = {
       date: state.workout.date,
       splitId: state.workout.splitId,
+      splitName: currentSplitName(),
       exerciseName: master?.name || "(不明)",
       equipmentNo: item.equipmentNo || master?.equipmentNo || "",
       setup: item.setup || master?.setup || "",
+      unit: item.unit || state.unitDisplay,
       sets: item.sets
     };
     await pushHistory(item.exId, entry);
@@ -237,9 +259,7 @@ async function autosave(){
 
 function makeEmptySets(n){
   const arr = [];
-  for (let i=0;i<n;i++){
-    arr.push({ wKg:null, reps:null, weak:false });
-  }
+  for (let i=0;i<n;i++) arr.push({ wKg:null, reps:null, weak:false });
   return arr;
 }
 
@@ -252,6 +272,7 @@ async function addExerciseById(exId){
   const setup = last?.setup || master?.setup || "";
   const comment = master?.defaultComment || "";
   const setsCount = clamp(last?.sets?.length || 4, 1, 10);
+  const unit = last?.unit || state.unitDisplay;
 
   const item = {
     id: uid(),
@@ -259,6 +280,7 @@ async function addExerciseById(exId){
     equipmentNo,
     setup,
     comment,
+    unit,
     sets: makeEmptySets(setsCount)
   };
 
@@ -293,10 +315,8 @@ function setWeight(itemId, idx, val){
   const item = state.workout.items.find(x=>x.id===itemId);
   if (!item) return;
   const n = parseNum(val);
-  if (n == null){ item.sets[idx].wKg = null; }
-  else{
-    item.sets[idx].wKg = state.unit === "kg" ? n : lbToKg(n);
-  }
+  if (n == null) item.sets[idx].wKg = null;
+  else item.sets[idx].wKg = (item.unit === "kg") ? n : lbToKg(n);
   autosave();
 }
 function setReps(itemId, idx, val){
@@ -318,13 +338,17 @@ function setItemText(itemId, key, val){
   item[key] = String(val || "");
   autosave();
 }
-
-// ===== Rendering =====
-function fmtWeight(kg){
-  if (kg == null) return "";
-  return state.unit === "kg" ? String(kg) : String(kgToLb(kg));
+function setItemUnit(itemId, unit){
+  const item = state.workout.items.find(x=>x.id===itemId);
+  if (!item) return;
+  item.unit = unit;
+  autosave().then(render);
 }
-function unitLabel(){ return state.unit; }
+
+function fmtWeightForItem(item, kg){
+  if (kg == null) return "";
+  return item.unit === "kg" ? String(kg) : String(kgToLb(kg));
+}
 
 function render(){
   if (!state.workout) return;
@@ -347,7 +371,6 @@ function render(){
 
     const head = document.createElement("div");
     head.className = "cardhead";
-
     head.innerHTML = `
       <div>
         <div class="cardtitle">${escapeHtml(name)}</div>
@@ -366,16 +389,25 @@ function render(){
     head.querySelector('[data-act="minus"]').onclick = ()=>adjustSetCount(item.id, -1);
     head.querySelector('[data-act="plus"]').onclick  = ()=>adjustSetCount(item.id, +1);
     head.querySelector('[data-act="del"]').onclick   = ()=>removeExercise(item.id);
-
     card.appendChild(head);
 
-    const meta = document.createElement("div");
-    meta.className = "meta";
-    meta.innerHTML = `
-      <span class="chip"><strong>単位</strong> ${unitLabel()}</span>
-      <span class="chip"><strong>セット</strong> ${item.sets.length}</span>
+    const unitRow = document.createElement("div");
+    unitRow.className = "row";
+    unitRow.style.marginTop = "10px";
+    unitRow.innerHTML = `
+      <div class="field" style="margin:0;">
+        <label class="hint">この種目の単位</label>
+        <div class="seg small">
+          <button class="segbtn ${item.unit==="kg"?"active":""}" type="button" data-u="kg">kg</button>
+          <button class="segbtn ${item.unit==="lb"?"active":""}" type="button" data-u="lb">lb</button>
+        </div>
+      </div>
+      <div class="chip"><strong>セット</strong> ${item.sets.length}</div>
     `;
-    card.appendChild(meta);
+    unitRow.querySelectorAll("button").forEach(b=>{
+      b.onclick = ()=> setItemUnit(item.id, b.dataset.u);
+    });
+    card.appendChild(unitRow);
 
     const editRow = document.createElement("div");
     editRow.className = "row";
@@ -405,7 +437,7 @@ function render(){
       row.innerHTML = `
         <div class="mini">
           <span class="num">${idx+1}</span>
-          <input inputmode="decimal" placeholder="重量(${unitLabel()})" value="${escapeAttr(fmtWeight(s.wKg))}">
+          <input inputmode="decimal" placeholder="重量(${escapeHtml(item.unit)})" value="${escapeAttr(fmtWeightForItem(item, s.wKg))}">
         </div>
         <div class="mini">
           <input inputmode="numeric" placeholder="回数" value="${escapeAttr(s.reps ?? "")}">
@@ -475,6 +507,9 @@ function openPicker(){
 }
 
 // ===== Master =====
+async function refreshMasters(){
+  state.masters = await getAllMasters();
+}
 async function openMaster(){
   await refreshMasters();
   renderMasterList();
@@ -546,8 +581,95 @@ async function openMasterEdit(id){
   dlg.showModal();
 }
 
-async function refreshMasters(){
-  state.masters = await getAllMasters();
+// ===== Splits manager =====
+function renderSplitsManager(){
+  const host = el("splitsList");
+  if (!host) return;
+  host.innerHTML = "";
+  state.splits.forEach((s, idx)=>{
+    const div = document.createElement("div");
+    div.className = "pickitem";
+    div.innerHTML = `
+      <div class="name">${escapeHtml(s.name)}</div>
+      <div class="sub">ID: ${escapeHtml(s.id)}</div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn ghost" type="button" data-act="up">↑</button>
+        <button class="btn ghost" type="button" data-act="down">↓</button>
+        <button class="btn ghost" type="button" data-act="rename">名前変更</button>
+        <button class="btn danger" type="button" data-act="del">削除</button>
+      </div>
+    `;
+    div.querySelector('[data-act="up"]').onclick = ()=>moveSplit(idx, -1);
+    div.querySelector('[data-act="down"]').onclick = ()=>moveSplit(idx, +1);
+    div.querySelector('[data-act="rename"]').onclick = ()=>renameSplit(idx);
+    div.querySelector('[data-act="del"]').onclick = ()=>deleteSplit(idx);
+    host.appendChild(div);
+  });
+}
+
+function makeSplitIdFromName(name){
+  const base = name.trim().toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9\-_]/g,"");
+  const seed = base || "part";
+  let id = seed;
+  let i = 2;
+  while (state.splits.some(s=>s.id===id)){
+    id = `${seed}-${i++}`;
+  }
+  return id;
+}
+
+async function persistSettings(){
+  const settings = await getSettings();
+  settings.splits = state.splits;
+  settings.unitDisplay = state.unitDisplay;
+  await setSettings(settings);
+  renderSplitTabs();
+}
+
+async function moveSplit(idx, delta){
+  const j = idx + delta;
+  if (j < 0 || j >= state.splits.length) return;
+  const a = [...state.splits];
+  const [x] = a.splice(idx,1);
+  a.splice(j,0,x);
+  state.splits = a;
+  await persistSettings();
+  renderSplitsManager();
+}
+
+async function renameSplit(idx){
+  const cur = state.splits[idx];
+  const name = prompt("部位名を入力", cur.name);
+  if (!name) return;
+  state.splits[idx] = { ...cur, name: name.trim() };
+  await persistSettings();
+  renderSplitsManager();
+  render();
+}
+
+async function deleteSplit(idx){
+  if (state.splits.length <= 1){
+    alert("最低1つは必要です");
+    return;
+  }
+  const s = state.splits[idx];
+  if (!confirm(`部位「${s.name}」を削除しますか？\n（テンプレは残りますが、選べなくなります）`)) return;
+  state.splits = state.splits.filter((_,i)=>i!==idx);
+  if (!state.splits.some(x=>x.id===state.splitId)){
+    setSplit(state.splits[0].id);
+  }
+  await persistSettings();
+  renderSplitsManager();
+}
+
+async function addSplit(){
+  const name = el("newSplitName").value.trim();
+  if (!name){ alert("部位名を入力してね"); return; }
+  const id = makeSplitIdFromName(name);
+  state.splits.push({ id, name });
+  el("newSplitName").value = "";
+  await persistSettings();
+  renderSplitsManager();
 }
 
 // ===== Template =====
@@ -569,16 +691,10 @@ async function loadTemplate(){
     const equipmentNo = last?.equipmentNo || master.equipmentNo || "";
     const setup = last?.setup || master.setup || "";
     const comment = master.defaultComment || "";
+    const unit = last?.unit || state.unitDisplay;
     const setsCount = clamp(t.sets || last?.sets?.length || 4, 1, 12);
 
-    const item = {
-      id: uid(),
-      exId: t.exId,
-      equipmentNo,
-      setup,
-      comment,
-      sets: makeEmptySets(setsCount)
-    };
+    const item = { id: uid(), exId: t.exId, equipmentNo, setup, comment, unit, sets: makeEmptySets(setsCount) };
     if (last?.sets?.length){
       for (let i=0;i<Math.min(item.sets.length, last.sets.length);i++){
         item.sets[i].wKg = last.sets[i].wKg ?? null;
@@ -595,57 +711,16 @@ async function loadTemplate(){
 async function saveTemplateFromToday(){
   if (!state.workout) return;
   const items = state.workout.items.map(x=>({ exId: x.exId, sets: x.sets.length }));
-  const tpl = { splitId: state.splitId, items };
-  await saveTemplate(tpl);
+  await saveTemplate({ splitId: state.splitId, items });
   alert("テンプレを上書きしました");
 }
 
-// ===== History =====
-async function openHistory(){
-  const body = el("historyBody");
-  body.innerHTML = "";
-
-  const todayExIds = new Set(state.workout?.items.map(x=>x.exId) || []);
-  const ordered = [...state.masters].sort((a,b)=>{
-    const A = todayExIds.has(a.id) ? 0 : 1;
-    const B = todayExIds.has(b.id) ? 0 : 1;
-    if (A!==B) return A-B;
-    return a.name.localeCompare(b.name,"ja");
-  });
-
-  for (const m of ordered){
-    const hist = await getHistory(m.id);
-    const last = hist[0];
-    const div = document.createElement("div");
-    div.className = "pickitem";
-    div.innerHTML = `
-      <div class="name">${escapeHtml(m.name)}</div>
-      <div class="sub">${last ? `${escapeHtml(last.date)} / ${escapeHtml(SPLITS.find(s=>s.id===last.splitId)?.name || "")}` : "履歴なし"}</div>
-      ${last ? renderHistoryDetail(last) : ""}
-    `;
-    body.appendChild(div);
-  }
-
-  el("dlgHistory").showModal();
-}
-
-function renderHistoryDetail(last){
-  const sample = (last.sets || []).slice(0,3).map(s=>{
-    const w = s.wKg == null ? "-" : (state.unit==="kg" ? s.wKg : kgToLb(s.wKg));
-    const r = s.reps ?? "-";
-    return `${w}${unitLabel()} x ${r}${s.weak ? "△" : ""}`;
-  }).join(" / ");
-  const eq = last.equipmentNo ? `機材 <strong>${escapeHtml(last.equipmentNo)}</strong>` : "";
-  const st = last.setup ? ` ・ 設定 <strong>${escapeHtml(last.setup)}</strong>` : "";
-  return `<div class="sub">${eq}${st}</div><div class="sub">${escapeHtml(sample)}</div>`;
-}
-
-// ===== Backup (JSON export/import) =====
+// ===== Backup =====
 async function exportJSON(){
   const payload = {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
-    settings: (await idbGet(STORES.settings, Keys.settings))?.value || { unit:"kg" },
+    settings: (await idbGet(STORES.settings, Keys.settings))?.value || { unitDisplay:"kg", splits: DEFAULT_SPLITS },
     masters: (await idbAll(STORES.masters)).map(r=>r.value),
     templates: (await idbAll(STORES.templates)).map(r=>r.value),
     workouts: (await idbAll(STORES.workouts)).map(r=>r.value),
@@ -664,21 +739,25 @@ async function importJSON(file){
   const text = await file.text();
   const data = JSON.parse(text);
 
-  if (!data || data.version !== 1){
+  if (!data || (data.version !== 1 && data.version !== 2)){
     alert("形式が違うみたい。正しいバックアップJSONを選んでね。");
     return;
   }
   if (!confirm("読み込むと、端末内データをバックアップ内容で上書きします。続行しますか？")) return;
 
-  await setSettings(data.settings || { unit:"kg" });
+  const settings = data.settings || { unitDisplay:"kg", splits: DEFAULT_SPLITS };
+  if (data.version === 1){
+    if (settings.unit && !settings.unitDisplay) settings.unitDisplay = settings.unit;
+    if (!settings.splits) settings.splits = DEFAULT_SPLITS;
+  }
+  await setSettings(settings);
 
-  for (const m of (data.masters || [])){
-    await upsertMaster(m);
-  }
-  for (const t of (data.templates || [])){
-    await saveTemplate(t);
-  }
+  for (const m of (data.masters || [])) await upsertMaster(m);
+  for (const t of (data.templates || [])) await saveTemplate(t);
   for (const w of (data.workouts || [])){
+    if (Array.isArray(w.items)){
+      w.items = w.items.map(it => ({ unit: settings.unitDisplay || "kg", ...it }));
+    }
     await saveWorkout(w);
   }
   for (const h of (data.histories || [])){
@@ -690,21 +769,23 @@ async function importJSON(file){
   alert("復元しました");
 }
 
-// ===== HTML escape =====
+// ===== Escape =====
 function escapeHtml(s){
-  return String(s ?? "").replace(/[&<>"']/g, c=>({
-    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-  })[c]);
+  return String(s ?? "").replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 }
 function escapeAttr(s){ return escapeHtml(s).replace(/"/g,"&quot;"); }
 
-// ===== Wire up =====
+// ===== Wire =====
 async function init(){
   await ensureSeed();
 
   const settings = await getSettings();
-  state.unit = settings.unit || "kg";
+  state.unitDisplay = settings.unitDisplay || "kg";
+  state.splits = Array.isArray(settings.splits) && settings.splits.length ? settings.splits : DEFAULT_SPLITS;
+
   unitButtonsReflect();
+  renderSplitTabs();
+  renderSplitsManager();
 
   await refreshMasters();
 
@@ -712,51 +793,62 @@ async function init(){
   dateInput.value = state.date;
   state.workout = await getWorkout(state.date);
 
-  setSplit(state.workout.splitId || state.splitId);
+  const firstSplit = state.splits[0]?.id || "chest";
+  if (!state.workout.splitId || !state.splits.some(s=>s.id===state.workout.splitId)){
+    state.workout.splitId = firstSplit;
+  }
+  setSplit(state.workout.splitId);
+
+  state.workout.items = (state.workout.items || []).map(it => ({ unit: state.unitDisplay, ...it }));
+  await saveWorkout(state.workout);
 
   render();
 }
 
 document.addEventListener("DOMContentLoaded", async ()=>{
-  document.querySelectorAll(".segbtn[data-split]").forEach(b=>{
-    b.onclick = ()=> setSplit(b.dataset.split);
-  });
-
   el("workDate").addEventListener("change", async (e)=>{
     state.date = e.target.value || todayISO();
     state.workout = await getWorkout(state.date);
-    setSplit(state.workout.splitId || state.splitId);
+    const firstSplit = state.splits[0]?.id || "chest";
+    if (!state.workout.splitId || !state.splits.some(s=>s.id===state.workout.splitId)){
+      state.workout.splitId = firstSplit;
+    }
+    setSplit(state.workout.splitId);
+    state.workout.items = (state.workout.items || []).map(it => ({ unit: state.unitDisplay, ...it }));
+    await saveWorkout(state.workout);
     render();
   });
 
   el("btnAddExercise").onclick = openPicker;
-
   el("btnLoadTemplate").onclick = loadTemplate;
   el("btnSaveTemplate").onclick = saveTemplateFromToday;
 
   el("btnMaster").onclick = openMaster;
   el("btnNewMaster").onclick = ()=>openMasterEdit(null);
 
-  el("btnHistory").onclick = openHistory;
-
   el("btnSettings").onclick = ()=>{
     unitButtonsReflect();
+    renderSplitsManager();
     el("dlgSettings").showModal();
   };
+
   document.querySelectorAll("#dlgSettings .segbtn[data-unit]").forEach(b=>{
     b.onclick = async ()=>{
-      state.unit = b.dataset.unit;
+      state.unitDisplay = b.dataset.unit;
       document.querySelectorAll("#dlgSettings .segbtn[data-unit]").forEach(x=>x.classList.toggle("active", x===b));
-      await setSettings({ unit: state.unit });
+      await persistSettings();
       render();
     };
   });
+
   el("btnExport").onclick = exportJSON;
   el("fileImport").addEventListener("change", async (e)=>{
     const f = e.target.files?.[0];
     if (f) await importJSON(f);
     e.target.value = "";
   });
+
+  el("btnAddSplit").onclick = addSplit;
 
   await init();
 });

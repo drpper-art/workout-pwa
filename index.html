@@ -21,11 +21,7 @@
     <div class="title">筋トレログ</div>
 
     <div class="row">
-      <div class="seg" role="tablist" aria-label="split">
-        <button class="segbtn active" data-split="chest">胸</button>
-        <button class="segbtn" data-split="back">背中</button>
-        <button class="segbtn" data-split="legs">足</button>
-      </div>
+      <div id="splitTabs" class="seg" role="tablist" aria-label="split"></div>
 
       <button id="btnSettings" class="btn ghost">設定</button>
     </div>
@@ -77,7 +73,18 @@
         <div class="hint">書き出したJSONをDropboxへ保存 → 機種変更も復元OK</div>
       </div>
 
-      <menu class="dlgmenu">
+      
+      <div class="field">
+        <label>部位（追加・並び替え）</label>
+        <div class="row">
+          <input id="newSplitName" placeholder="例：肩 / 腕 / 有酸素" style="flex:1; min-width:180px;">
+          <button id="btnAddSplit" type="button" class="btn">＋ 追加</button>
+        </div>
+        <div id="splitsList" class="picklist" style="margin-top:10px;"></div>
+        <div class="hint">※削除しても過去データは消しません（選べなくなるだけ）</div>
+      </div>
+
+<menu class="dlgmenu">
         <button class="btn ghost">閉じる</button>
       </menu>
     </form>
