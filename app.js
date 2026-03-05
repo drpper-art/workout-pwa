@@ -35,7 +35,7 @@ function parseNum(s){
 
 // ===== IndexedDB tiny wrapper =====
 const DB_NAME = "workout_pwa_db";
-const DB_VER = 2;
+const DB_VER = 3;
 const STORES = {
   settings: "settings",
   masters: "masters",
@@ -107,7 +107,7 @@ const Keys = {
 
 async function getSettings(){
   const x = await idbGet(STORES.settings, Keys.settings);
-  return x?.value || { unitDisplay:"kg", splits: DEFAULT_SPLITS };
+  return x?.value || { unitDisplay:"kg", splits: DEFAULT_SPLITS, manufacturers: [] };
 }
 async function setSettings(value){
   await idbPut(STORES.settings, { key: Keys.settings, value });
@@ -193,6 +193,7 @@ async function ensureSeed(){
 // ===== UI State =====
 let state = {
   splits: DEFAULT_SPLITS,
+  manufacturers: [],
   splitId: "chest",
   unitDisplay: "kg",
   date: todayISO(),
@@ -251,6 +252,7 @@ async function autosave(){
       equipmentNo: item.equipmentNo || master?.equipmentNo || "",
       setup: item.setup || master?.setup || "",
       unit: item.unit || state.unitDisplay,
+      manufacturer: item.manufacturer || "",
       sets: item.sets
     };
     await pushHistory(item.exId, entry);
@@ -277,6 +279,7 @@ async function addExerciseById(exId){
   const item = {
     id: uid(),
     exId,
+    manufacturer: last?.manufacturer || "",
     equipmentNo,
     setup,
     comment,
@@ -408,6 +411,22 @@ function render(){
       b.onclick = ()=> setItemUnit(item.id, b.dataset.u);
     });
     card.appendChild(unitRow);
+
+    const makerRow = document.createElement("div");
+    makerRow.className = "row";
+    makerRow.style.marginTop = "10px";
+    const makerOptions = [""].concat(state.manufacturers);
+    makerRow.innerHTML = `
+      <div class="field" style="margin:0; flex:1; min-width:220px;">
+        <label class="hint">メーカー</label>
+        <select class="sel">
+          ${makerOptions.map(m=>`<option value="${escapeAttr(m)}" ${((item.manufacturer||"")===m)?"selected":""}>${escapeHtml(m===""?"(未選択)":m)}</option>`).join("")}
+        </select>
+      </div>
+    `;
+    const sel = makerRow.querySelector("select");
+    sel.onchange = (e)=>setItemText(item.id, "manufacturer", e.target.value);
+    card.appendChild(makerRow);
 
     const editRow = document.createElement("div");
     editRow.className = "row";
@@ -621,6 +640,7 @@ function makeSplitIdFromName(name){
 async function persistSettings(){
   const settings = await getSettings();
   settings.splits = state.splits;
+  settings.manufacturers = state.manufacturers;
   settings.unitDisplay = state.unitDisplay;
   await setSettings(settings);
   renderSplitTabs();
@@ -635,6 +655,7 @@ async function moveSplit(idx, delta){
   state.splits = a;
   await persistSettings();
   renderSplitsManager();
+  renderMakersManager();
 }
 
 async function renameSplit(idx){
@@ -672,6 +693,81 @@ async function addSplit(){
   renderSplitsManager();
 }
 
+
+// ===== Manufacturers manager =====
+function renderMakersManager(){
+  const host = el("makersList");
+  if (!host) return;
+  host.innerHTML = "";
+  state.manufacturers.forEach((name, idx)=>{
+    const div = document.createElement("div");
+    div.className = "pickitem";
+    div.innerHTML = `
+      <div class="name">${escapeHtml(name)}</div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn ghost" type="button" data-act="up">↑</button>
+        <button class="btn ghost" type="button" data-act="down">↓</button>
+        <button class="btn ghost" type="button" data-act="rename">名前変更</button>
+        <button class="btn danger" type="button" data-act="del">削除</button>
+      </div>
+    `;
+    div.querySelector('[data-act="up"]').onclick = ()=>moveMaker(idx, -1);
+    div.querySelector('[data-act="down"]').onclick = ()=>moveMaker(idx, +1);
+    div.querySelector('[data-act="rename"]').onclick = ()=>renameMaker(idx);
+    div.querySelector('[data-act="del"]').onclick = ()=>deleteMaker(idx);
+    host.appendChild(div);
+  });
+}
+
+async function moveMaker(idx, delta){
+  const j = idx + delta;
+  if (j < 0 || j >= state.manufacturers.length) return;
+  const a = [...state.manufacturers];
+  const [x] = a.splice(idx,1);
+  a.splice(j,0,x);
+  state.manufacturers = a;
+  await persistSettings();
+  renderMakersManager();
+}
+
+async function renameMaker(idx){
+  const cur = state.manufacturers[idx];
+  const name = prompt("メーカー名を入力", cur);
+  if (!name) return;
+  state.manufacturers[idx] = name.trim();
+  await persistSettings();
+  renderMakersManager();
+  render();
+}
+
+async function deleteMaker(idx){
+  const cur = state.manufacturers[idx];
+  if (!confirm(`メーカー「${cur}」を削除しますか？`)) return;
+  state.manufacturers = state.manufacturers.filter((_,i)=>i!==idx);
+  if (state.workout){
+    for (const it of state.workout.items){
+      if ((it.manufacturer||"") === cur) it.manufacturer = "";
+    }
+    await autosave();
+  }
+  await persistSettings();
+  renderMakersManager();
+  render();
+}
+
+async function addMaker(){
+  const name = el("newMakerName").value.trim();
+  if (!name){ alert("メーカー名を入力してね"); return; }
+  if (state.manufacturers.includes(name)){
+    alert("同じメーカー名が既にあります");
+    return;
+  }
+  state.manufacturers.push(name);
+  el("newMakerName").value = "";
+  await persistSettings();
+  renderMakersManager();
+}
+
 // ===== Template =====
 async function loadTemplate(){
   const tpl = await getTemplate(state.splitId);
@@ -694,7 +790,7 @@ async function loadTemplate(){
     const unit = last?.unit || state.unitDisplay;
     const setsCount = clamp(t.sets || last?.sets?.length || 4, 1, 12);
 
-    const item = { id: uid(), exId: t.exId, equipmentNo, setup, comment, unit, sets: makeEmptySets(setsCount) };
+    const item = { id: uid(), exId: t.exId, manufacturer: last?.manufacturer || "", equipmentNo, setup, comment, unit, sets: makeEmptySets(setsCount) };
     if (last?.sets?.length){
       for (let i=0;i<Math.min(item.sets.length, last.sets.length);i++){
         item.sets[i].wKg = last.sets[i].wKg ?? null;
@@ -718,9 +814,9 @@ async function saveTemplateFromToday(){
 // ===== Backup =====
 async function exportJSON(){
   const payload = {
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
-    settings: (await idbGet(STORES.settings, Keys.settings))?.value || { unitDisplay:"kg", splits: DEFAULT_SPLITS },
+    settings: (await idbGet(STORES.settings, Keys.settings))?.value || { unitDisplay:"kg", splits: DEFAULT_SPLITS, manufacturers: [] },
     masters: (await idbAll(STORES.masters)).map(r=>r.value),
     templates: (await idbAll(STORES.templates)).map(r=>r.value),
     workouts: (await idbAll(STORES.workouts)).map(r=>r.value),
@@ -739,16 +835,17 @@ async function importJSON(file){
   const text = await file.text();
   const data = JSON.parse(text);
 
-  if (!data || (data.version !== 1 && data.version !== 2)){
+  if (!data || (data.version !== 1 && data.version !== 2 && data.version !== 3)){
     alert("形式が違うみたい。正しいバックアップJSONを選んでね。");
     return;
   }
   if (!confirm("読み込むと、端末内データをバックアップ内容で上書きします。続行しますか？")) return;
 
-  const settings = data.settings || { unitDisplay:"kg", splits: DEFAULT_SPLITS };
+  const settings = data.settings || { unitDisplay:"kg", splits: DEFAULT_SPLITS, manufacturers: [] };
   if (data.version === 1){
     if (settings.unit && !settings.unitDisplay) settings.unitDisplay = settings.unit;
     if (!settings.splits) settings.splits = DEFAULT_SPLITS;
+    if (!settings.manufacturers) settings.manufacturers = [];
   }
   await setSettings(settings);
 
@@ -756,7 +853,7 @@ async function importJSON(file){
   for (const t of (data.templates || [])) await saveTemplate(t);
   for (const w of (data.workouts || [])){
     if (Array.isArray(w.items)){
-      w.items = w.items.map(it => ({ unit: settings.unitDisplay || "kg", ...it }));
+      w.items = w.items.map(it => ({ manufacturer: it.manufacturer || "", unit: settings.unitDisplay || "kg", ...it }));
     }
     await saveWorkout(w);
   }
@@ -780,14 +877,14 @@ function csvEscape(v){
 }
 
 async function exportCSV(){
-  const settings = (await idbGet(STORES.settings, Keys.settings))?.value || { unitDisplay:"kg", splits: DEFAULT_SPLITS };
+  const settings = (await idbGet(STORES.settings, Keys.settings))?.value || { unitDisplay:"kg", splits: DEFAULT_SPLITS, manufacturers: [] };
   const splitNameById = new Map((settings.splits||DEFAULT_SPLITS).map(x=>[x.id,x.name]));
   const masters = new Map((await idbAll(STORES.masters)).map(r=>[r.value.id, r.value]));
   const workouts = (await idbAll(STORES.workouts)).map(r=>r.value).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
   const header = [
     "date","split","exercise","exercise_id","set_no",
     "unit","weight_input","weight_kg","reps","weak",
-    "equipment_no","setup","comment"
+    "manufacturer","equipment_no","setup","comment"
   ];
   const lines = [header.map(csvEscape).join(",")];
 
@@ -800,6 +897,7 @@ async function exportCSV(){
       const m = masters.get(it.exId) || {};
       const exName = m.name || "(不明)";
       const unit = it.unit || settings.unitDisplay || "kg";
+      const mk = it.manufacturer || "";
       const eq = it.equipmentNo || m.equipmentNo || "";
       const setup = it.setup || m.setup || "";
       const comment = it.comment || m.defaultComment || "";
@@ -812,7 +910,7 @@ async function exportCSV(){
         const row = [
           date, splitName, exName, it.exId || "", String(idx+1),
           unit, wInput, wKg, reps, weak,
-          eq, setup, comment
+          mk, eq, setup, comment
         ];
         lines.push(row.map(csvEscape).join(","));
       });
@@ -841,6 +939,7 @@ async function init(){
   const settings = await getSettings();
   state.unitDisplay = settings.unitDisplay || "kg";
   state.splits = Array.isArray(settings.splits) && settings.splits.length ? settings.splits : DEFAULT_SPLITS;
+  state.manufacturers = Array.isArray(settings.manufacturers) ? settings.manufacturers : [];
 
   unitButtonsReflect();
   renderSplitTabs();
@@ -858,7 +957,7 @@ async function init(){
   }
   setSplit(state.workout.splitId);
 
-  state.workout.items = (state.workout.items || []).map(it => ({ unit: state.unitDisplay, ...it }));
+  state.workout.items = (state.workout.items || []).map(it => ({ manufacturer: it.manufacturer || "", unit: state.unitDisplay, ...it }));
   await saveWorkout(state.workout);
 
   render();
@@ -873,7 +972,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
       state.workout.splitId = firstSplit;
     }
     setSplit(state.workout.splitId);
-    state.workout.items = (state.workout.items || []).map(it => ({ unit: state.unitDisplay, ...it }));
+    state.workout.items = (state.workout.items || []).map(it => ({ manufacturer: it.manufacturer || "", unit: state.unitDisplay, ...it }));
     await saveWorkout(state.workout);
     render();
   });
@@ -888,6 +987,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   el("btnSettings").onclick = ()=>{
     unitButtonsReflect();
     renderSplitsManager();
+    renderMakersManager();
     el("dlgSettings").showModal();
   };
 
@@ -910,6 +1010,9 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   });
 
   el("btnAddSplit").onclick = addSplit;
+
+  const btnAddMaker = el("btnAddMaker");
+  if (btnAddMaker) btnAddMaker.onclick = addMaker;
 
   await init();
 });
