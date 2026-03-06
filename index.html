@@ -201,6 +201,14 @@
   </dialog>
 
 
+  <script>
+    window.__appjs_loaded = false;
+    setTimeout(()=>{
+      if(!window.__appjs_loaded){
+        alert("app.js が読み込めていないか、初期化で停止しています。\n\n1) URLが末尾 / 付きか確認\n2) ブラウザでページを更新\n3) 直らなければ URLの最後に ?nosw=1 を付けて開いてください（キャッシュ解除）");
+      }
+    }, 1500);
+  </script>
   <script src="./app.js"></script>
 </body>
 </html>

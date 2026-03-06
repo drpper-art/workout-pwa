@@ -3,7 +3,33 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js").catch(()=>{});
 }
 
-const APP_VERSION = "v8";
+try{ window.__appjs_loaded = true; }catch{}
+
+const APP_VERSION = "v9";
+
+
+// URLに ?nosw=1 を付けて開くと、Service Worker と Cache を解除してから再読み込みします（更新トラブル用）
+;(async ()=>{
+  try{
+    const p = new URLSearchParams(location.search);
+    if (!p.has("nosw")) return;
+
+    if ("serviceWorker" in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister()));
+    }
+    if (window.caches){
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k=>caches.delete(k)));
+    }
+    const u = new URL(location.href);
+    u.searchParams.delete("nosw");
+    location.replace(u.toString());
+  }catch(e){
+    console.warn("[WorkoutPWA] nosw cleanup failed", e);
+  }
+})();
+
 
 // ===== Utils =====
 const DEFAULT_SPLITS = [

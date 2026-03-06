@@ -35,3 +35,7 @@
 - ボタン配線を全てnull安全に修正
 - 画面にバージョン表示（設定内）
 - SW更新を強化（network-first + skipWaiting）
+
+## v9（更新トラブル対策）
+- app.js 読み込み監視（失敗時にアラート）
+- URL末尾に ?nosw=1 で Service Worker / Cache を解除して復旧
