@@ -3,6 +3,8 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js").catch(()=>{});
 }
 
+const APP_VERSION = "v8";
+
 // ===== Utils =====
 const DEFAULT_SPLITS = [
   { id:"chest", name:"胸" },
@@ -204,6 +206,16 @@ let state = {
 const el = (id)=>document.getElementById(id);
 const cards = el("cards");
 
+function byId(id){ return document.getElementById(id); }
+function onClick(id, fn){
+  const e = byId(id);
+  if (e) e.onclick = fn;
+}
+function onChange(id, fn){
+  const e = byId(id);
+  if (e) e.addEventListener("change", fn);
+}
+
 function currentSplitName(){
   return state.splits.find(s=>s.id===state.splitId)?.name || "";
 }
@@ -228,8 +240,9 @@ function setSplit(splitId){
     autosave();
   }
   renderSplitTabs();
-  render();
+  await loadDate(state.date);
 }
+
 
 function unitButtonsReflect(){
   const dlg = el("dlgSettings");
@@ -811,6 +824,83 @@ async function saveTemplateFromToday(){
   alert("テンプレを上書きしました");
 }
 
+
+// ===== Calendar =====
+let calCursor = null; // first day of month (Date)
+let calHasDates = new Set(); // yyyy-mm-dd that have records
+
+function ymd(d){
+  const z = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+  return z.toISOString().slice(0,10);
+}
+function ym(d){
+  const z = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+  return z.toISOString().slice(0,7);
+}
+
+async function refreshHasDates(){
+  const workouts = (await idbAll(STORES.workouts)).map(r=>r.value);
+  const s = new Set();
+  for (const w of workouts){
+    if (!w?.date) continue;
+    if (Array.isArray(w.items) && w.items.length > 0){
+      s.add(w.date);
+    }
+  }
+  calHasDates = s;
+}
+
+function renderCalendar(){
+  const title = el("calTitle");
+  const grid = el("calGrid");
+  if (!title || !grid || !calCursor) return;
+
+  title.textContent = ym(calCursor);
+  grid.innerHTML = "";
+
+  const year = calCursor.getFullYear();
+  const month = calCursor.getMonth();
+  const first = new Date(year, month, 1);
+  const startDow = first.getDay();
+  const start = new Date(year, month, 1 - startDow);
+
+  const today = todayISO();
+  const selected = state.date;
+
+  for (let i=0;i<42;i++){
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    const s = ymd(d);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "calday";
+    if (d.getMonth() !== month) btn.classList.add("off");
+    if (s === today) btn.classList.add("today");
+    if (calHasDates.has(s)) btn.classList.add("has");
+    if (s === selected) btn.classList.add("sel");
+    btn.textContent = String(d.getDate());
+    btn.onclick = async ()=>{
+      const dlg = el("dlgCalendar");
+      if (dlg) dlg.close();
+      await loadDate(s);
+    };
+    grid.appendChild(btn);
+  }
+}
+
+async function openCalendar(){
+  await refreshHasDates();
+  const d = state.date ? new Date(state.date + "T00:00:00") : new Date();
+  calCursor = new Date(d.getFullYear(), d.getMonth(), 1);
+  renderCalendar();
+  el("dlgCalendar").showModal();
+}
+
+function moveCalendar(deltaMonths){
+  if (!calCursor) return;
+  calCursor = new Date(calCursor.getFullYear(), calCursor.getMonth() + deltaMonths, 1);
+  renderCalendar();
+}
+
 // ===== Backup =====
 async function exportJSON(){
   const payload = {
@@ -866,6 +956,50 @@ async function importJSON(file){
   alert("復元しました");
 }
 
+
+
+// ===== History =====
+async function openHistory(){
+  const body = el("historyBody");
+  if (!body) return;
+  body.innerHTML = "";
+
+  const todayExIds = new Set(state.workout?.items.map(x=>x.exId) || []);
+  const ordered = [...state.masters].sort((a,b)=>{
+    const A = todayExIds.has(a.id) ? 0 : 1;
+    const B = todayExIds.has(b.id) ? 0 : 1;
+    if (A!==B) return A-B;
+    return a.name.localeCompare(b.name,"ja");
+  });
+
+  for (const m of ordered){
+    const hist = await getHistory(m.id);
+    const last = hist[0];
+    const div = document.createElement("div");
+    div.className = "pickitem";
+    div.innerHTML = `
+      <div class="name">${escapeHtml(m.name)}</div>
+      <div class="sub">${last ? `${escapeHtml(last.date)} / ${escapeHtml(last.splitName || "")}` : "履歴なし"}</div>
+      ${last ? renderHistoryDetail(last) : ""}
+    `;
+    body.appendChild(div);
+  }
+
+  el("dlgHistory").showModal();
+}
+
+function renderHistoryDetail(last){
+  const unit = last.unit || state.unitDisplay;
+  const sample = (last.sets || []).slice(0,3).map(s=>{
+    const w = s.wKg == null ? "-" : (unit==="kg" ? s.wKg : kgToLb(s.wKg));
+    const r = s.reps ?? "-";
+    return `${w}${unit} x ${r}${s.weak ? "△" : ""}`;
+  }).join(" / ");
+  const mk = last.manufacturer ? `メーカー <strong>${escapeHtml(last.manufacturer)}</strong>` : "";
+  const eq = last.equipmentNo ? `機材 <strong>${escapeHtml(last.equipmentNo)}</strong>` : "";
+  const st = last.setup ? ` ・ 設定 <strong>${escapeHtml(last.setup)}</strong>` : "";
+  return `<div class="sub">${mk}${mk && (eq||st) ? " ・ " : ""}${eq}${st}</div><div class="sub">${escapeHtml(sample)}</div>`;
+}
 
 // ===== CSV Export =====
 function csvEscape(v){
@@ -963,56 +1097,82 @@ async function init(){
   render();
 }
 
+
+async function loadDate(dateStr){
+  state.date = dateStr || todayISO();
+  const dateInput = el("workDate");
+  if (dateInput) dateInput.value = state.date;
+
+  state.workout = await getWorkout(state.date);
+  const firstSplit = state.splits[0]?.id || "chest";
+  if (!state.workout.splitId || !state.splits.some(s=>s.id===state.workout.splitId)){
+    state.workout.splitId = firstSplit;
+  }
+  setSplit(state.workout.splitId);
+  state.workout.items = (state.workout.items || []).map(it => ({ manufacturer: it.manufacturer || "", unit: state.unitDisplay, ...it }));
+  await saveWorkout(state.workout);
+  render();
+}
+
+
 document.addEventListener("DOMContentLoaded", async ()=>{
-  el("workDate").addEventListener("change", async (e)=>{
-    state.date = e.target.value || todayISO();
-    state.workout = await getWorkout(state.date);
-    const firstSplit = state.splits[0]?.id || "chest";
-    if (!state.workout.splitId || !state.splits.some(s=>s.id===state.workout.splitId)){
-      state.workout.splitId = firstSplit;
+  try{
+    const v = document.getElementById("appVersion");
+    if (v) v.textContent = `Version: ${APP_VERSION}`;
+  }catch{}
+
+  try{
+    onChange("workDate", async (e)=>{ await loadDate(e.target.value); });
+
+    onClick("btnAddExercise", openPicker);
+
+    onClick("btnCalendar", openCalendar);
+    onClick("btnCalPrev", ()=>moveCalendar(-1));
+    onClick("btnCalNext", ()=>moveCalendar(1));
+
+    onClick("btnLoadTemplate", loadTemplate);
+    onClick("btnSaveTemplate", saveTemplateFromToday);
+
+    onClick("btnHistory", openHistory);
+    onClick("btnMaster", openMaster);
+    onClick("btnNewMaster", ()=>openMasterEdit(null));
+
+    onClick("btnSettings", ()=>{
+      unitButtonsReflect();
+      renderSplitsManager();
+      renderMakersManager();
+      el("dlgSettings").showModal();
+    });
+
+    document.querySelectorAll("#dlgSettings .segbtn[data-unit]").forEach(b=>{
+      b.onclick = async ()=>{
+        state.unitDisplay = b.dataset.unit;
+        document.querySelectorAll("#dlgSettings .segbtn[data-unit]").forEach(x=>x.classList.toggle("active", x===b));
+        await persistSettings();
+        render();
+      };
+    });
+
+    onClick("btnExport", exportJSON);
+    onClick("btnExportCsv", exportCSV);
+
+    const fileImp = byId("fileImport");
+    if (fileImp){
+      fileImp.addEventListener("change", async (e)=>{
+        const f = e.target.files?.[0];
+        if (f) await importJSON(f);
+        e.target.value = "";
+      });
     }
-    setSplit(state.workout.splitId);
-    state.workout.items = (state.workout.items || []).map(it => ({ manufacturer: it.manufacturer || "", unit: state.unitDisplay, ...it }));
-    await saveWorkout(state.workout);
-    render();
-  });
 
-  el("btnAddExercise").onclick = openPicker;
-  el("btnLoadTemplate").onclick = loadTemplate;
-  el("btnSaveTemplate").onclick = saveTemplateFromToday;
+    onClick("btnAddSplit", addSplit);
+    onClick("btnAddMaker", addMaker);
 
-  el("btnMaster").onclick = openMaster;
-  el("btnNewMaster").onclick = ()=>openMasterEdit(null);
-
-  el("btnSettings").onclick = ()=>{
-    unitButtonsReflect();
-    renderSplitsManager();
-    renderMakersManager();
-    el("dlgSettings").showModal();
-  };
-
-  document.querySelectorAll("#dlgSettings .segbtn[data-unit]").forEach(b=>{
-    b.onclick = async ()=>{
-      state.unitDisplay = b.dataset.unit;
-      document.querySelectorAll("#dlgSettings .segbtn[data-unit]").forEach(x=>x.classList.toggle("active", x===b));
-      await persistSettings();
-      render();
-    };
-  });
-
-  el("btnExport").onclick = exportJSON;
-  const btnCsv = el("btnExportCsv");
-  if (btnCsv) btnCsv.onclick = exportCSV;
-  el("fileImport").addEventListener("change", async (e)=>{
-    const f = e.target.files?.[0];
-    if (f) await importJSON(f);
-    e.target.value = "";
-  });
-
-  el("btnAddSplit").onclick = addSplit;
-
-  const btnAddMaker = el("btnAddMaker");
-  if (btnAddMaker) btnAddMaker.onclick = addMaker;
-
-  await init();
+    await init();
+    console.log("[WorkoutPWA]", APP_VERSION, "ready");
+  }catch(err){
+    console.error("[WorkoutPWA] init failed", err);
+    alert("アプリ初期化でエラーが発生しました。ページを更新してください。
+PCの場合は F12→Console の赤い行を教えてください。");
+  }
 });

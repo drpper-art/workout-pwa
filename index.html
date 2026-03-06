@@ -32,6 +32,8 @@
         <input id="workDate" type="date">
       </div>
 
+      <button id="btnCalendar" class="btn ghost">カレンダー</button>
+
       <button id="btnLoadTemplate" class="btn">テンプレ読込</button>
       <button id="btnSaveTemplate" class="btn ghost">テンプレ上書き</button>
     </div>
@@ -65,7 +67,7 @@
         <label>バックアップ</label>
         <div class="row">
           <button id="btnExport" type="button" class="btn">JSON書き出し</button>
-            <button id="btnExportCsv" type="button" class="btn ghost">CSV書き出し</button>
+          <button id="btnExportCsv" type="button" class="btn ghost">CSV書き出し</button>
           <label class="btn ghost filebtn">
             JSON読み込み
             <input id="fileImport" type="file" accept="application/json" hidden>
@@ -74,7 +76,6 @@
         <div class="hint">書き出したJSONをDropboxへ保存 → 機種変更も復元OK</div>
       </div>
 
-      
       <div class="field">
         <label>部位（追加・並び替え）</label>
         <div class="row">
@@ -83,8 +84,10 @@
         </div>
         <div id="splitsList" class="picklist" style="margin-top:10px;"></div>
         <div class="hint">※削除しても過去データは消しません（選べなくなるだけ）</div>
+      </div>
 
-        <div class="hr"></div>
+      <div class="hr"></div>
+
       <div class="field">
         <label>メーカー（登録）</label>
         <div class="row">
@@ -95,9 +98,9 @@
         <div class="hint">※ここで登録したメーカーを、各種目カードで選択できます</div>
       </div>
 
-      </div>
+      <div class="hint" id="appVersion">Version: v8</div>
 
-<menu class="dlgmenu">
+      <menu class="dlgmenu">
         <button class="btn ghost">閉じる</button>
       </menu>
     </form>
@@ -176,6 +179,27 @@
       </menu>
     </form>
   </dialog>
+
+
+  <!-- Calendar Modal -->
+  <dialog id="dlgCalendar" class="dlg">
+    <form method="dialog" class="dlgbox">
+      <div class="calhead">
+        <button id="btnCalPrev" type="button" class="btn ghost">‹</button>
+        <div class="caltitle" id="calTitle">----</div>
+        <button id="btnCalNext" type="button" class="btn ghost">›</button>
+      </div>
+      <div class="calweek">
+        <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
+      </div>
+      <div id="calGrid" class="calgrid"></div>
+      <div class="hint">色が付いた日＝記録あり</div>
+      <menu class="dlgmenu">
+        <button class="btn ghost">閉じる</button>
+      </menu>
+    </form>
+  </dialog>
+
 
   <script src="./app.js"></script>
 </body>
