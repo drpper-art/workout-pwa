@@ -32,6 +32,8 @@
         <input id="workDate" type="date">
       </div>
 
+      <button id="btnCalendar" class="btn ghost">カレンダー</button>
+
       <button id="btnLoadTemplate" class="btn">テンプレ読込</button>
       <button id="btnSaveTemplate" class="btn ghost">テンプレ上書き</button>
     </div>
@@ -176,6 +178,27 @@
       </menu>
     </form>
   </dialog>
+
+
+  <!-- Calendar Modal -->
+  <dialog id="dlgCalendar" class="dlg">
+    <form method="dialog" class="dlgbox">
+      <div class="calhead">
+        <button id="btnCalPrev" type="button" class="btn ghost">‹</button>
+        <div class="caltitle" id="calTitle">----</div>
+        <button id="btnCalNext" type="button" class="btn ghost">›</button>
+      </div>
+      <div class="calweek">
+        <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
+      </div>
+      <div id="calGrid" class="calgrid"></div>
+      <div class="hint">色が付いた日＝記録あり</div>
+      <menu class="dlgmenu">
+        <button class="btn ghost">閉じる</button>
+      </menu>
+    </form>
+  </dialog>
+
 
   <script src="./app.js"></script>
 </body>

@@ -228,8 +228,9 @@ function setSplit(splitId){
     autosave();
   }
   renderSplitTabs();
-  render();
+  await loadDate(state.date);
 }
+
 
 function unitButtonsReflect(){
   const dlg = el("dlgSettings");
@@ -811,6 +812,83 @@ async function saveTemplateFromToday(){
   alert("テンプレを上書きしました");
 }
 
+
+// ===== Calendar =====
+let calCursor = null; // first day of month (Date)
+let calHasDates = new Set(); // yyyy-mm-dd that have records
+
+function ymd(d){
+  const z = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+  return z.toISOString().slice(0,10);
+}
+function ym(d){
+  const z = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+  return z.toISOString().slice(0,7);
+}
+
+async function refreshHasDates(){
+  const workouts = (await idbAll(STORES.workouts)).map(r=>r.value);
+  const s = new Set();
+  for (const w of workouts){
+    if (!w?.date) continue;
+    if (Array.isArray(w.items) && w.items.length > 0){
+      s.add(w.date);
+    }
+  }
+  calHasDates = s;
+}
+
+function renderCalendar(){
+  const title = el("calTitle");
+  const grid = el("calGrid");
+  if (!title || !grid || !calCursor) return;
+
+  title.textContent = ym(calCursor);
+  grid.innerHTML = "";
+
+  const year = calCursor.getFullYear();
+  const month = calCursor.getMonth();
+  const first = new Date(year, month, 1);
+  const startDow = first.getDay();
+  const start = new Date(year, month, 1 - startDow);
+
+  const today = todayISO();
+  const selected = state.date;
+
+  for (let i=0;i<42;i++){
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    const s = ymd(d);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "calday";
+    if (d.getMonth() !== month) btn.classList.add("off");
+    if (s === today) btn.classList.add("today");
+    if (calHasDates.has(s)) btn.classList.add("has");
+    if (s === selected) btn.classList.add("sel");
+    btn.textContent = String(d.getDate());
+    btn.onclick = async ()=>{
+      const dlg = el("dlgCalendar");
+      if (dlg) dlg.close();
+      await loadDate(s);
+    };
+    grid.appendChild(btn);
+  }
+}
+
+async function openCalendar(){
+  await refreshHasDates();
+  const d = state.date ? new Date(state.date + "T00:00:00") : new Date();
+  calCursor = new Date(d.getFullYear(), d.getMonth(), 1);
+  renderCalendar();
+  el("dlgCalendar").showModal();
+}
+
+function moveCalendar(deltaMonths){
+  if (!calCursor) return;
+  calCursor = new Date(calCursor.getFullYear(), calCursor.getMonth() + deltaMonths, 1);
+  renderCalendar();
+}
+
 // ===== Backup =====
 async function exportJSON(){
   const payload = {
@@ -963,21 +1041,34 @@ async function init(){
   render();
 }
 
+
+async function loadDate(dateStr){
+  state.date = dateStr || todayISO();
+  const dateInput = el("workDate");
+  if (dateInput) dateInput.value = state.date;
+
+  state.workout = await getWorkout(state.date);
+  const firstSplit = state.splits[0]?.id || "chest";
+  if (!state.workout.splitId || !state.splits.some(s=>s.id===state.workout.splitId)){
+    state.workout.splitId = firstSplit;
+  }
+  setSplit(state.workout.splitId);
+  state.workout.items = (state.workout.items || []).map(it => ({ manufacturer: it.manufacturer || "", unit: state.unitDisplay, ...it }));
+  await saveWorkout(state.workout);
+  render();
+}
+
 document.addEventListener("DOMContentLoaded", async ()=>{
-  el("workDate").addEventListener("change", async (e)=>{
-    state.date = e.target.value || todayISO();
-    state.workout = await getWorkout(state.date);
-    const firstSplit = state.splits[0]?.id || "chest";
-    if (!state.workout.splitId || !state.splits.some(s=>s.id===state.workout.splitId)){
-      state.workout.splitId = firstSplit;
-    }
-    setSplit(state.workout.splitId);
-    state.workout.items = (state.workout.items || []).map(it => ({ manufacturer: it.manufacturer || "", unit: state.unitDisplay, ...it }));
-    await saveWorkout(state.workout);
-    render();
-  });
+  el("workDate").addEventListener("change", async (e)=>{ await loadDate(e.target.value); });
 
   el("btnAddExercise").onclick = openPicker;
+
+  const btnCal = el("btnCalendar");
+  if (btnCal) btnCal.onclick = openCalendar;
+  const btnPrev = el("btnCalPrev");
+  const btnNext = el("btnCalNext");
+  if (btnPrev) btnPrev.onclick = ()=>moveCalendar(-1);
+  if (btnNext) btnNext.onclick = ()=>moveCalendar(1);
   el("btnLoadTemplate").onclick = loadTemplate;
   el("btnSaveTemplate").onclick = saveTemplateFromToday;
 
