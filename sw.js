@@ -1,4 +1,4 @@
-const CACHE = "workout-pwa-v10";
+const CACHE = "workout-pwa-v12";
 const ASSETS = ["./", "./index.html", "./app.css", "./app.js", "./manifest.webmanifest", "./favicon.ico",
   "./icons/icon-192.png", "./icons/icon-512.png"
 ];

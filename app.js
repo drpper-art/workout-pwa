@@ -5,7 +5,7 @@ if ("serviceWorker" in navigator) {
 
 try{ window.__appjs_loaded = true; }catch{}
 
-const APP_VERSION = "v9";
+const APP_VERSION = "v11";
 
 
 // URLに ?nosw=1 を付けて開くと、Service Worker と Cache を解除してから再読み込みします（更新トラブル用）
@@ -266,7 +266,7 @@ function setSplit(splitId){
     autosave();
   }
   renderSplitTabs();
-  await loadDate(state.date);
+  render();
 }
 
 
@@ -1198,7 +1198,6 @@ document.addEventListener("DOMContentLoaded", async ()=>{
     console.log("[WorkoutPWA]", APP_VERSION, "ready");
   }catch(err){
     console.error("[WorkoutPWA] init failed", err);
-    alert("アプリ初期化でエラーが発生しました。ページを更新してください。
-PCの場合は F12→Console の赤い行を教えてください。");
+    alert("アプリ初期化でエラーが発生しました。ページを更新してください。\nPCの場合は F12→Console の赤い行を教えてください。");
   }
 });

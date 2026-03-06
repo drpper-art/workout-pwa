@@ -39,3 +39,9 @@
 ## v9（更新トラブル対策）
 - app.js 読み込み監視（失敗時にアラート）
 - URL末尾に ?nosw=1 で Service Worker / Cache を解除して復旧
+
+## v10
+- ボタン不反応の原因だった app.js の構文エラーを修正（setSplit内の不正awaitを削除）
+
+## v11
+- app.js の構文エラーを追加修正（alert文字列の改行をエスケープ）
