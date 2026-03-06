@@ -36,7 +36,6 @@
 
       <button id="btnLoadTemplate" class="btn">テンプレ読込</button>
       <button id="btnSaveTemplate" class="btn ghost">テンプレ上書き</button>
-      <button id="btnCopyWorkout" class="btn ghost">ワークアウトコピー</button>
     </div>
   </header>
 
@@ -99,7 +98,7 @@
         <div class="hint">※ここで登録したメーカーを、各種目カードで選択できます</div>
       </div>
 
-      <div class="hint" id="appVersion">Version: v12</div>
+      <div class="hint" id="appVersion">Version: v13</div>
 
       <menu class="dlgmenu">
         <button class="btn ghost">閉じる</button>
@@ -194,25 +193,13 @@
         <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
       </div>
       <div id="calGrid" class="calgrid"></div>
-      <div class="hint">色が付いた日＝記録あり / 下に部位を表示</div>
+      <div class="hint">色が付いた日＝記録あり</div>
       <menu class="dlgmenu">
         <button class="btn ghost">閉じる</button>
       </menu>
     </form>
   </dialog>
 
-
-  <!-- Copy Workout Modal -->
-  <dialog id="dlgCopyWorkout" class="dlg">
-    <form method="dialog" class="dlgbox">
-      <h3>ワークアウトをコピー</h3>
-      <div class="hint">記録済みの日を選ぶと、現在の日付へコピーできます</div>
-      <div id="copyWorkoutList" class="picklist" style="margin-top:10px;"></div>
-      <menu class="dlgmenu">
-        <button class="btn ghost">閉じる</button>
-      </menu>
-    </form>
-  </dialog>
 
   <script>
     window.__appjs_loaded = false;

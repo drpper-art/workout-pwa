@@ -5,7 +5,7 @@ if ("serviceWorker" in navigator) {
 
 try{ window.__appjs_loaded = true; }catch{}
 
-const APP_VERSION = "v12";
+const APP_VERSION = "v11";
 
 
 // URLに ?nosw=1 を付けて開くと、Service Worker と Cache を解除してから再読み込みします（更新トラブル用）
@@ -853,7 +853,7 @@ async function saveTemplateFromToday(){
 
 // ===== Calendar =====
 let calCursor = null; // first day of month (Date)
-let calMetaByDate = new Map(); // yyyy-mm-dd -> { splitId, splitName, count }
+let calHasDates = new Set(); // yyyy-mm-dd that have records
 
 function ymd(d){
   const z = new Date(d.getTime() - d.getTimezoneOffset()*60000);
@@ -864,17 +864,16 @@ function ym(d){
   return z.toISOString().slice(0,7);
 }
 
-async function refreshCalendarMeta(){
+async function refreshHasDates(){
   const workouts = (await idbAll(STORES.workouts)).map(r=>r.value);
-  const map = new Map();
+  const s = new Set();
   for (const w of workouts){
     if (!w?.date) continue;
-    const items = Array.isArray(w.items) ? w.items : [];
-    if (items.length === 0) continue;
-    const splitName = state.splits.find(s=>s.id===w.splitId)?.name || "";
-    map.set(w.date, { splitId: w.splitId || "", splitName, count: items.length });
+    if (Array.isArray(w.items) && w.items.length > 0){
+      s.add(w.date);
+    }
   }
-  calMetaByDate = map;
+  calHasDates = s;
 }
 
 function renderCalendar(){
@@ -901,11 +900,10 @@ function renderCalendar(){
     btn.type = "button";
     btn.className = "calday";
     if (d.getMonth() !== month) btn.classList.add("off");
-    const meta = calMetaByDate.get(s);
     if (s === today) btn.classList.add("today");
-    if (meta) btn.classList.add("has");
+    if (calHasDates.has(s)) btn.classList.add("has");
     if (s === selected) btn.classList.add("sel");
-    btn.innerHTML = `<div class="calnum">${d.getDate()}</div>${meta?.splitName ? `<div class="caltag">${escapeHtml(meta.splitName)}</div>` : ``}`;
+    btn.textContent = String(d.getDate());
     btn.onclick = async ()=>{
       const dlg = el("dlgCalendar");
       if (dlg) dlg.close();
@@ -916,7 +914,7 @@ function renderCalendar(){
 }
 
 async function openCalendar(){
-  await refreshCalendarMeta();
+  await refreshHasDates();
   const d = state.date ? new Date(state.date + "T00:00:00") : new Date();
   calCursor = new Date(d.getFullYear(), d.getMonth(), 1);
   renderCalendar();
@@ -927,102 +925,6 @@ function moveCalendar(deltaMonths){
   if (!calCursor) return;
   calCursor = new Date(calCursor.getFullYear(), calCursor.getMonth() + deltaMonths, 1);
   renderCalendar();
-}
-
-// ===== Copy Workout =====
-async function listRecordedWorkouts(){
-  const workouts = (await idbAll(STORES.workouts))
-    .map(r=>r.value)
-    .filter(w=>w?.date && Array.isArray(w.items) && w.items.length > 0)
-    .sort((a,b)=>(b.date||"").localeCompare(a.date||""));
-  return workouts;
-}
-
-function cloneWorkoutItem(item){
-  return {
-    id: uid(),
-    exId: item.exId,
-    manufacturer: item.manufacturer || "",
-    equipmentNo: item.equipmentNo || "",
-    setup: item.setup || "",
-    comment: item.comment || "",
-    unit: item.unit || state.unitDisplay || "kg",
-    sets: (Array.isArray(item.sets) ? item.sets : []).map(s=>(
-      { wKg: s?.wKg ?? null, reps: s?.reps ?? null, weak: !!s?.weak }
-    ))
-  };
-}
-
-async function copyWorkoutFromDate(srcDate){
-  if (!srcDate) return;
-  if (srcDate === state.date){
-    alert("同じ日付はコピー元にできません");
-    return;
-  }
-
-  const src = await getWorkout(srcDate);
-  const srcItems = Array.isArray(src?.items) ? src.items : [];
-  if (srcItems.length === 0){
-    alert("コピー元にワークアウトがありません");
-    return;
-  }
-
-  const replace = state.workout.items.length > 0
-    ? confirm(` ${srcDate} の内容を ${state.date} にコピーします。\nOK=置き換え / キャンセル=追加`)
-    : true;
-
-  if (replace){
-    state.workout.items = [];
-    if (src.splitId && state.splits.some(s=>s.id===src.splitId)){
-      state.workout.splitId = src.splitId;
-      state.splitId = src.splitId;
-    }
-  }
-
-  state.workout.items.push(...srcItems.map(cloneWorkoutItem));
-  await autosave();
-  renderSplitTabs();
-  render();
-
-  const dlg = el("dlgCopyWorkout");
-  if (dlg) dlg.close();
-  alert(` ${srcDate} のワークアウトをコピーしました`);
-}
-
-async function openCopyWorkout(){
-  const list = el("copyWorkoutList");
-  if (!list) return;
-
-  const workouts = await listRecordedWorkouts();
-  list.innerHTML = "";
-
-  const rows = workouts.filter(w=>w.date !== state.date);
-  if (rows.length === 0){
-    list.innerHTML = `<div class="hint">コピーできる過去のワークアウトがまだありません</div>`;
-    el("dlgCopyWorkout").showModal();
-    return;
-  }
-
-  for (const w of rows){
-    const splitName = state.splits.find(s=>s.id===w.splitId)?.name || "";
-    const sampleNames = (w.items || []).slice(0,3).map(it=>{
-      const m = state.masters.find(x=>x.id===it.exId);
-      return m?.name || "(不明)";
-    }).join(" / ");
-    const more = (w.items || []).length > 3 ? ` ほか${(w.items || []).length - 3}種目` : "";
-
-    const div = document.createElement("div");
-    div.className = "pickitem";
-    div.innerHTML = `
-      <div class="name">${escapeHtml(w.date)}${splitName ? ` ・ ${escapeHtml(splitName)}` : ``}</div>
-      <div class="sub">${(w.items || []).length}種目${sampleNames ? ` ・ ${escapeHtml(sampleNames)}${escapeHtml(more)}` : ``}</div>
-      <button class="btn" type="button">この日をコピー</button>
-    `;
-    div.querySelector("button").onclick = ()=>copyWorkoutFromDate(w.date);
-    list.appendChild(div);
-  }
-
-  el("dlgCopyWorkout").showModal();
 }
 
 // ===== Backup =====
@@ -1256,7 +1158,6 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 
     onClick("btnLoadTemplate", loadTemplate);
     onClick("btnSaveTemplate", saveTemplateFromToday);
-    onClick("btnCopyWorkout", openCopyWorkout);
 
     onClick("btnHistory", openHistory);
     onClick("btnMaster", openMaster);
