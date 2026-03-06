@@ -945,6 +945,50 @@ async function importJSON(file){
 }
 
 
+
+// ===== History =====
+async function openHistory(){
+  const body = el("historyBody");
+  if (!body) return;
+  body.innerHTML = "";
+
+  const todayExIds = new Set(state.workout?.items.map(x=>x.exId) || []);
+  const ordered = [...state.masters].sort((a,b)=>{
+    const A = todayExIds.has(a.id) ? 0 : 1;
+    const B = todayExIds.has(b.id) ? 0 : 1;
+    if (A!==B) return A-B;
+    return a.name.localeCompare(b.name,"ja");
+  });
+
+  for (const m of ordered){
+    const hist = await getHistory(m.id);
+    const last = hist[0];
+    const div = document.createElement("div");
+    div.className = "pickitem";
+    div.innerHTML = `
+      <div class="name">${escapeHtml(m.name)}</div>
+      <div class="sub">${last ? `${escapeHtml(last.date)} / ${escapeHtml(last.splitName || "")}` : "履歴なし"}</div>
+      ${last ? renderHistoryDetail(last) : ""}
+    `;
+    body.appendChild(div);
+  }
+
+  el("dlgHistory").showModal();
+}
+
+function renderHistoryDetail(last){
+  const unit = last.unit || state.unitDisplay;
+  const sample = (last.sets || []).slice(0,3).map(s=>{
+    const w = s.wKg == null ? "-" : (unit==="kg" ? s.wKg : kgToLb(s.wKg));
+    const r = s.reps ?? "-";
+    return `${w}${unit} x ${r}${s.weak ? "△" : ""}`;
+  }).join(" / ");
+  const mk = last.manufacturer ? `メーカー <strong>${escapeHtml(last.manufacturer)}</strong>` : "";
+  const eq = last.equipmentNo ? `機材 <strong>${escapeHtml(last.equipmentNo)}</strong>` : "";
+  const st = last.setup ? ` ・ 設定 <strong>${escapeHtml(last.setup)}</strong>` : "";
+  return `<div class="sub">${mk}${mk && (eq||st) ? " ・ " : ""}${eq}${st}</div><div class="sub">${escapeHtml(sample)}</div>`;
+}
+
 // ===== CSV Export =====
 function csvEscape(v){
   const s = String(v ?? "");
@@ -1072,6 +1116,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   el("btnLoadTemplate").onclick = loadTemplate;
   el("btnSaveTemplate").onclick = saveTemplateFromToday;
 
+  el("btnHistory").onclick = openHistory;
   el("btnMaster").onclick = openMaster;
   el("btnNewMaster").onclick = ()=>openMasterEdit(null);
 
