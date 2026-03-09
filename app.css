@@ -11,6 +11,10 @@
 }
 *{box-sizing:border-box;}
 html,body{height:100%;}
+html{
+  -webkit-text-size-adjust:100%;
+  text-size-adjust:100%;
+}
 body{
   margin:0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
@@ -29,7 +33,7 @@ body{
 .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
 .datebox{display:flex; gap:8px; align-items:center;}
 .datebox label{color:var(--muted); font-size:12px;}
-input,textarea{
+input,textarea,select{
   width:100%;
   padding:10px 12px;
   border-radius:12px;
@@ -37,6 +41,8 @@ input,textarea{
   background:#0f1012;
   color:var(--text);
   outline:none;
+  font-size:16px;
+  line-height:1.35;
 }
 input[type="date"]{min-width:150px;}
 textarea{resize:vertical;}
@@ -179,6 +185,7 @@ select.sel{
   border:1px solid var(--line);
   background:#0f1012;
   color:var(--text);
+  font-size:16px;
 }
 
 /* Calendar */
