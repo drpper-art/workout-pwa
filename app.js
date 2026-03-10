@@ -344,6 +344,17 @@ function removeExercise(itemId){
   autosave().then(render);
 }
 
+function moveExercise(itemId, delta){
+  const items = state.workout?.items;
+  if (!Array.isArray(items) || items.length <= 1) return;
+  const i = items.findIndex(x=>x.id===itemId);
+  if (i < 0) return;
+  const j = i + delta;
+  if (j < 0 || j >= items.length) return;
+  [items[i], items[j]] = [items[j], items[i]];
+  autosave().then(render);
+}
+
 function adjustSetCount(itemId, delta){
   const item = state.workout.items.find(x=>x.id===itemId);
   if (!item) return;
@@ -403,6 +414,9 @@ function render(){
   }
 
   for (const item of items){
+    const itemIndex = items.findIndex(x=>x.id===item.id);
+    const isFirst = itemIndex <= 0;
+    const isLast = itemIndex >= items.length - 1;
     const master = state.masters.find(m=>m.id===item.exId);
     const name = master?.name || "(種目不明)";
     const eqNo = item.equipmentNo || master?.equipmentNo || "";
@@ -424,12 +438,16 @@ function render(){
       <div class="actions">
         <button class="iconbtn" data-act="minus" title="セット減">－</button>
         <button class="iconbtn" data-act="plus" title="セット増">＋</button>
+        <button class="iconbtn" data-act="up" title="上へ" ${isFirst ? "disabled" : ""}>↑</button>
+        <button class="iconbtn" data-act="down" title="下へ" ${isLast ? "disabled" : ""}>↓</button>
         <button class="iconbtn" data-act="del" title="削除">🗑</button>
       </div>
     `;
 
     head.querySelector('[data-act="minus"]').onclick = ()=>adjustSetCount(item.id, -1);
     head.querySelector('[data-act="plus"]').onclick  = ()=>adjustSetCount(item.id, +1);
+    head.querySelector('[data-act="up"]').onclick    = ()=>moveExercise(item.id, -1);
+    head.querySelector('[data-act="down"]').onclick  = ()=>moveExercise(item.id, +1);
     head.querySelector('[data-act="del"]').onclick   = ()=>removeExercise(item.id);
     card.appendChild(head);
 

@@ -97,6 +97,10 @@ textarea{resize:vertical;}
   padding:8px 10px;
   font-weight:800;
 }
+.iconbtn:disabled{
+  opacity:.35;
+  cursor:not-allowed;
+}
 
 .meta{
   display:flex;
