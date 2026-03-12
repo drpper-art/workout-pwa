@@ -5,7 +5,7 @@ if ("serviceWorker" in navigator) {
 
 try{ window.__appjs_loaded = true; }catch{}
 
-const APP_VERSION = "v16.1";
+const APP_VERSION = "v16.3";
 
 
 // URLに ?nosw=1 を付けて開くと、Service Worker と Cache を解除してから再読み込みします（更新トラブル用）
@@ -246,6 +246,15 @@ function currentSplitName(){
   return state.splits.find(s=>s.id===state.splitId)?.name || "";
 }
 
+function updateLayoutMetrics(){
+  const top = el("topBar") || document.querySelector("header.top");
+  if (!top) return;
+  requestAnimationFrame(()=>{
+    const h = Math.ceil(top.getBoundingClientRect().height || top.offsetHeight || 0);
+    document.documentElement.style.setProperty("--topbar-h", `${h}px`);
+  });
+}
+
 function renderSplitTabs(){
   const host = el("splitTabs");
   if (!host) return;
@@ -257,7 +266,9 @@ function renderSplitTabs(){
     b.onclick = ()=> setSplit(s.id);
     host.appendChild(b);
   }
+  updateLayoutMetrics();
 }
+
 
 function setSplit(splitId){
   state.splitId = splitId;
@@ -1209,6 +1220,9 @@ async function loadDate(dateStr){
   render();
 }
 
+
+window.addEventListener("resize", updateLayoutMetrics);
+window.addEventListener("orientationchange", updateLayoutMetrics);
 
 document.addEventListener("DOMContentLoaded", async ()=>{
   try{
