@@ -254,3 +254,30 @@ select.sel{
     padding-right:10px;
   }
 }
+
+.templatenote{
+  margin-top:8px;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.5;
+}
+.quickbar{
+  position:sticky;
+  top:0;
+  z-index:11;
+  margin-top:10px;
+  margin-bottom:0;
+  padding:10px 0 2px;
+  background:linear-gradient(#0f0f10, rgba(15,15,16,.94));
+}
+.card.collapsed .cardbody{display:none;}
+.cardsummary{
+  margin-top:10px;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.cardsummary .chip{background:#111215;}
+@media (max-width: 640px){
+  .quickbar{padding-top:8px;}
+}

@@ -5,7 +5,7 @@ if ("serviceWorker" in navigator) {
 
 try{ window.__appjs_loaded = true; }catch{}
 
-const APP_VERSION = "v11";
+const APP_VERSION = "v16";
 
 
 // URLに ?nosw=1 を付けて開くと、Service Worker と Cache を解除してから再読み込みします（更新トラブル用）
@@ -323,6 +323,7 @@ async function addExerciseById(exId){
     setup,
     comment,
     unit,
+    collapsed: false,
     sets: makeEmptySets(setsCount)
   };
 
@@ -398,6 +399,13 @@ function setItemUnit(itemId, unit){
   autosave().then(render);
 }
 
+function toggleCollapsed(itemId){
+  const item = state.workout.items.find(x=>x.id===itemId);
+  if (!item) return;
+  item.collapsed = !item.collapsed;
+  autosave().then(render);
+}
+
 function fmtWeightForItem(item, kg){
   if (kg == null) return "";
   return item.unit === "kg" ? String(kg) : String(kgToLb(kg));
@@ -421,9 +429,11 @@ function render(){
     const name = master?.name || "(種目不明)";
     const eqNo = item.equipmentNo || master?.equipmentNo || "";
     const setup = item.setup || master?.setup || "";
+    const summaryWeight = item.sets.find(s=>s.wKg != null)?.wKg ?? null;
+    const summaryReps = item.sets.find(s=>s.reps != null)?.reps ?? null;
 
     const card = document.createElement("div");
-    card.className = "card";
+    card.className = "card" + (item.collapsed ? " collapsed" : "");
 
     const head = document.createElement("div");
     head.className = "cardhead";
@@ -433,9 +443,11 @@ function render(){
         <div class="sub">
           ${eqNo ? `機材 <strong>${escapeHtml(eqNo)}</strong>` : `機材 <span class="muted">-</span>`}
           ${setup ? ` ・ 設定 <strong>${escapeHtml(setup)}</strong>` : ``}
+          ${item.manufacturer ? ` ・ メーカー <strong>${escapeHtml(item.manufacturer)}</strong>` : ``}
         </div>
       </div>
       <div class="actions">
+        <button class="iconbtn" data-act="collapse" title="開閉">${item.collapsed ? "▸" : "▾"}</button>
         <button class="iconbtn" data-act="minus" title="セット減">－</button>
         <button class="iconbtn" data-act="plus" title="セット増">＋</button>
         <button class="iconbtn" data-act="up" title="上へ" ${isFirst ? "disabled" : ""}>↑</button>
@@ -444,12 +456,26 @@ function render(){
       </div>
     `;
 
+    head.querySelector('[data-act="collapse"]').onclick = ()=>toggleCollapsed(item.id);
     head.querySelector('[data-act="minus"]').onclick = ()=>adjustSetCount(item.id, -1);
     head.querySelector('[data-act="plus"]').onclick  = ()=>adjustSetCount(item.id, +1);
     head.querySelector('[data-act="up"]').onclick    = ()=>moveExercise(item.id, -1);
     head.querySelector('[data-act="down"]').onclick  = ()=>moveExercise(item.id, +1);
     head.querySelector('[data-act="del"]').onclick   = ()=>removeExercise(item.id);
     card.appendChild(head);
+
+    const summary = document.createElement("div");
+    summary.className = "cardsummary";
+    summary.innerHTML = `
+      <div class="chip"><strong>セット</strong> ${item.sets.length}</div>
+      <div class="chip"><strong>単位</strong> ${escapeHtml(item.unit || state.unitDisplay)}</div>
+      ${summaryWeight != null ? `<div class="chip"><strong>重量</strong> ${escapeHtml(fmtWeightForItem(item, summaryWeight))}${escapeHtml(item.unit || state.unitDisplay)}</div>` : ``}
+      ${summaryReps != null ? `<div class="chip"><strong>回数</strong> ${escapeHtml(summaryReps)}</div>` : ``}
+    `;
+    card.appendChild(summary);
+
+    const body = document.createElement("div");
+    body.className = "cardbody";
 
     const unitRow = document.createElement("div");
     unitRow.className = "row";
@@ -462,12 +488,11 @@ function render(){
           <button class="segbtn ${item.unit==="lb"?"active":""}" type="button" data-u="lb">lb</button>
         </div>
       </div>
-      <div class="chip"><strong>セット</strong> ${item.sets.length}</div>
     `;
     unitRow.querySelectorAll("button").forEach(b=>{
       b.onclick = ()=> setItemUnit(item.id, b.dataset.u);
     });
-    card.appendChild(unitRow);
+    body.appendChild(unitRow);
 
     const makerRow = document.createElement("div");
     makerRow.className = "row";
@@ -483,7 +508,7 @@ function render(){
     `;
     const sel = makerRow.querySelector("select");
     sel.onchange = (e)=>setItemText(item.id, "manufacturer", e.target.value);
-    card.appendChild(makerRow);
+    body.appendChild(makerRow);
 
     const editRow = document.createElement("div");
     editRow.className = "row";
@@ -502,7 +527,7 @@ function render(){
     const stInput = editRow.querySelectorAll("input")[1];
     eqInput.oninput = (e)=>setItemText(item.id, "equipmentNo", e.target.value);
     stInput.oninput = (e)=>setItemText(item.id, "setup", e.target.value);
-    card.appendChild(editRow);
+    body.appendChild(editRow);
 
     const sets = document.createElement("div");
     sets.className = "sets";
@@ -530,7 +555,7 @@ function render(){
       b.onclick = ()=>toggleWeak(item.id, idx);
       sets.appendChild(row);
     });
-    card.appendChild(sets);
+    body.appendChild(sets);
 
     const c = document.createElement("div");
     c.className = "field";
@@ -539,8 +564,9 @@ function render(){
       <textarea rows="2" placeholder="例：今日は肘痛み注意">${escapeHtml(item.comment || "")}</textarea>
     `;
     c.querySelector("textarea").oninput = (e)=>setItemText(item.id, "comment", e.target.value);
-    card.appendChild(c);
+    body.appendChild(c);
 
+    card.appendChild(body);
     cards.appendChild(card);
   }
 }
@@ -847,7 +873,7 @@ async function loadTemplate(){
     const unit = last?.unit || state.unitDisplay;
     const setsCount = clamp(t.sets || last?.sets?.length || 4, 1, 12);
 
-    const item = { id: uid(), exId: t.exId, manufacturer: last?.manufacturer || "", equipmentNo, setup, comment, unit, sets: makeEmptySets(setsCount) };
+    const item = { id: uid(), exId: t.exId, manufacturer: last?.manufacturer || "", equipmentNo, setup, comment, unit, collapsed: false, sets: makeEmptySets(setsCount) };
     if (last?.sets?.length){
       for (let i=0;i<Math.min(item.sets.length, last.sets.length);i++){
         item.sets[i].wKg = last.sets[i].wKg ?? null;
@@ -865,7 +891,7 @@ async function saveTemplateFromToday(){
   if (!state.workout) return;
   const items = state.workout.items.map(x=>({ exId: x.exId, sets: x.sets.length }));
   await saveTemplate({ splitId: state.splitId, items });
-  alert("テンプレを上書きしました");
+  alert("今の部位の順番・セット数でテンプレを保存しました");
 }
 
 
@@ -1135,7 +1161,7 @@ async function init(){
   }
   setSplit(state.workout.splitId);
 
-  state.workout.items = (state.workout.items || []).map(it => ({ manufacturer: it.manufacturer || "", unit: state.unitDisplay, ...it }));
+  state.workout.items = (state.workout.items || []).map(it => ({ manufacturer: it.manufacturer || "", collapsed: !!it.collapsed, unit: state.unitDisplay, ...it }));
   await saveWorkout(state.workout);
 
   render();
@@ -1153,7 +1179,7 @@ async function loadDate(dateStr){
     state.workout.splitId = firstSplit;
   }
   setSplit(state.workout.splitId);
-  state.workout.items = (state.workout.items || []).map(it => ({ manufacturer: it.manufacturer || "", unit: state.unitDisplay, ...it }));
+  state.workout.items = (state.workout.items || []).map(it => ({ manufacturer: it.manufacturer || "", collapsed: !!it.collapsed, unit: state.unitDisplay, ...it }));
   await saveWorkout(state.workout);
   render();
 }

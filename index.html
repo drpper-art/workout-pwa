@@ -35,16 +35,21 @@
       <button id="btnCalendar" class="btn ghost">カレンダー</button>
 
       <button id="btnLoadTemplate" class="btn">テンプレ読込</button>
-      <button id="btnSaveTemplate" class="btn ghost">テンプレ上書き</button>
+      <button id="btnSaveTemplate" class="btn ghost">今の内容をテンプレ保存</button>
     </div>
-  </header>
 
-  <main class="main">
-    <section class="toolbar">
+    <div class="templatenote">
+      <strong>テンプレ読込</strong>＝その部位の定番メニューを入れる　/　<strong>今の内容をテンプレ保存</strong>＝今日の順番・セット数でその部位のテンプレを更新
+    </div>
+
+    <section class="toolbar quickbar">
       <button id="btnAddExercise" class="btn">＋ 種目追加</button>
       <button id="btnHistory" class="btn ghost">履歴</button>
       <button id="btnMaster" class="btn ghost">種目マスタ</button>
     </section>
+  </header>
+
+  <main class="main">
 
     <section id="cards" class="cards"></section>
   </main>
