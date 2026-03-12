@@ -5,7 +5,7 @@ if ("serviceWorker" in navigator) {
 
 try{ window.__appjs_loaded = true; }catch{}
 
-const APP_VERSION = "v16";
+const APP_VERSION = "v16.1";
 
 
 // URLに ?nosw=1 を付けて開くと、Service Worker と Cache を解除してから再読み込みします（更新トラブル用）
@@ -187,10 +187,10 @@ async function ensureSeed(){
   const masters = await getAllMasters();
   if (masters.length === 0){
     const seed = [
-      { id: uid(), name:"ベンチプレス", equipmentNo:"", setup:"", defaultComment:"" },
-      { id: uid(), name:"インクラインDBプレス", equipmentNo:"", setup:"", defaultComment:"" },
-      { id: uid(), name:"ラットプルダウン", equipmentNo:"", setup:"", defaultComment:"" },
-      { id: uid(), name:"レッグプレス", equipmentNo:"", setup:"", defaultComment:"" }
+      { id: uid(), splitId:"chest", name:"ベンチプレス", equipmentNo:"", setup:"", defaultComment:"" },
+      { id: uid(), splitId:"chest", name:"インクラインDBプレス", equipmentNo:"", setup:"", defaultComment:"" },
+      { id: uid(), splitId:"back", name:"ラットプルダウン", equipmentNo:"", setup:"", defaultComment:"" },
+      { id: uid(), splitId:"legs", name:"レッグプレス", equipmentNo:"", setup:"", defaultComment:"" }
     ];
     for (const m of seed) await upsertMaster(m);
 
@@ -576,13 +576,15 @@ function openPicker(){
   const dlg = el("dlgPicker");
   const list = el("pickList");
   const search = el("pickSearch");
+  const hint = el("pickCurrentSplitHint");
   search.value = "";
+  if (hint) hint.textContent = `現在の部位: ${currentSplitName()} の種目だけ表示`;
   const renderList = ()=>{
     const q = search.value.trim().toLowerCase();
     list.innerHTML = "";
-    const filtered = state.masters.filter(m => m.name.toLowerCase().includes(q));
+    const filtered = mastersForCurrentSplit().filter(m => m.name.toLowerCase().includes(q));
     if (filtered.length === 0){
-      list.innerHTML = `<div class="hint">見つかりません。種目マスタで追加できます。</div>`;
+      list.innerHTML = `<div class="hint">この部位の種目がありません。種目マスタで追加できます。</div>`;
       return;
     }
     for (const m of filtered){
@@ -591,7 +593,8 @@ function openPicker(){
       div.innerHTML = `
         <div class="name">${escapeHtml(m.name)}</div>
         <div class="sub">
-          ${m.equipmentNo ? `機材 <strong>${escapeHtml(m.equipmentNo)}</strong>` : ``}
+          <strong>${escapeHtml(splitNameOfMaster(m))}</strong>
+          ${m.equipmentNo ? ` ・ 機材 <strong>${escapeHtml(m.equipmentNo)}</strong>` : ``}
           ${m.setup ? ` ・ 設定 <strong>${escapeHtml(m.setup)}</strong>` : ``}
         </div>
         <button class="btn" type="button">追加</button>
@@ -610,7 +613,19 @@ function openPicker(){
 
 // ===== Master =====
 async function refreshMasters(){
-  state.masters = await getAllMasters();
+  state.masters = (await getAllMasters()).map(m => ({ splitId: m.splitId || "", ...m }));
+}
+function splitNameOfMaster(m){
+  return state.splits.find(s=>s.id === (m.splitId || ""))?.name || "未設定";
+}
+function mastersForCurrentSplit(){
+  const current = state.splitId || "";
+  return state.masters.filter(m => (m.splitId || "") === current);
+}
+function fillMasterSplitOptions(selectedSplitId){
+  const sel = el("meSplit");
+  if (!sel) return;
+  sel.innerHTML = state.splits.map(s => `<option value="${escapeAttr(s.id)}" ${s.id===selectedSplitId?"selected":""}>${escapeHtml(s.name)}</option>`).join("");
 }
 async function openMaster(){
   await refreshMasters();
@@ -643,19 +658,23 @@ async function openMasterEdit(id){
   const isNew = !id;
   el("masterEditTitle").textContent = isNew ? "種目追加" : "種目編集";
 
-  let m = isNew ? { id: uid(), name:"", equipmentNo:"", setup:"", defaultComment:"" } : await getMaster(id);
-  if (!m) m = { id: uid(), name:"", equipmentNo:"", setup:"", defaultComment:"" };
+  let m = isNew ? { id: uid(), splitId: state.splitId, name:"", equipmentNo:"", setup:"", defaultComment:"" } : await getMaster(id);
+  if (!m) m = { id: uid(), splitId: state.splitId, name:"", equipmentNo:"", setup:"", defaultComment:"" };
+  if (!m.splitId || !state.splits.some(s=>s.id===m.splitId)) m.splitId = state.splitId;
 
+  fillMasterSplitOptions(m.splitId);
   el("meName").value = m.name;
   el("meEqNo").value = m.equipmentNo || "";
   el("meSetup").value = m.setup || "";
   el("meComment").value = m.defaultComment || "";
 
   el("btnMasterDelete").style.display = isNew ? "none" : "inline-flex";
+  el("btnMasterCancel").onclick = ()=>dlg.close();
 
   el("btnMasterSave").onclick = async ()=>{
     const name = el("meName").value.trim();
     if (!name){ alert("種目名を入力してね"); return; }
+    m.splitId = el("meSplit").value || state.splitId;
     m.name = name;
     m.equipmentNo = el("meEqNo").value.trim();
     m.setup = el("meSetup").value.trim();
@@ -1009,7 +1028,7 @@ async function importJSON(file){
   }
   await setSettings(settings);
 
-  for (const m of (data.masters || [])) await upsertMaster(m);
+  for (const m of (data.masters || [])) await upsertMaster({ splitId:"", ...m });
   for (const t of (data.templates || [])) await saveTemplate(t);
   for (const w of (data.workouts || [])){
     if (Array.isArray(w.items)){

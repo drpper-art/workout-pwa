@@ -115,6 +115,7 @@
   <dialog id="dlgPicker" class="dlg">
     <form method="dialog" class="dlgbox">
       <h3>種目を選択</h3>
+      <div class="hint" id="pickCurrentSplitHint">現在の部位のみ表示</div>
       <input id="pickSearch" class="search" placeholder="検索（例：ベンチ）">
       <div id="pickList" class="picklist"></div>
 
@@ -131,6 +132,7 @@
       <div class="row">
         <button id="btnNewMaster" type="button" class="btn">＋ 新規</button>
       </div>
+      <div class="hint" id="masterFilterHint">現在の部位の種目を表示</div>
       <div id="masterList" class="picklist"></div>
 
       <menu class="dlgmenu">
@@ -143,6 +145,11 @@
   <dialog id="dlgMasterEdit" class="dlg">
     <form method="dialog" class="dlgbox">
       <h3 id="masterEditTitle">種目編集</h3>
+
+      <div class="field">
+        <label>部位</label>
+        <select id="meSplit"></select>
+      </div>
 
       <div class="field">
         <label>種目名</label>
@@ -168,7 +175,7 @@
       <menu class="dlgmenu">
         <button id="btnMasterDelete" type="button" class="btn danger">削除</button>
         <button id="btnMasterSave" type="button" class="btn">保存</button>
-        <button class="btn ghost">キャンセル</button>
+        <button id="btnMasterCancel" type="button" class="btn ghost">キャンセル</button>
       </menu>
     </form>
   </dialog>
