@@ -609,6 +609,12 @@ function openPicker(){
   search.oninput = renderList;
   renderList();
   dlg.showModal();
+  const closeBtn = dlg.querySelector(".dlgmenu .btn.ghost");
+  if (closeBtn) {
+    setTimeout(() => closeBtn.focus(), 0);
+  } else {
+    setTimeout(() => search.blur(), 0);
+  }
 }
 
 // ===== Master =====
