@@ -103,7 +103,7 @@
         <div class="hint">※ここで登録したメーカーを、各種目カードで選択できます</div>
       </div>
 
-      <div class="hint" id="appVersion">Version: v13.1</div>
+      <div class="hint" id="appVersion">Version: v16.4</div>
 
       <menu class="dlgmenu">
         <button class="btn ghost">閉じる</button>
@@ -116,6 +116,21 @@
     <form method="dialog" class="dlgbox">
       <h3>種目を選択</h3>
       <div class="hint" id="pickCurrentSplitHint">現在の部位のみ表示</div>
+      <div class="quickaddbox">
+        <div class="hint">マスタ登録前でも、そのまま入力して追加できます</div>
+        <div class="row">
+          <input id="quickName" placeholder="種目名（例：チェストプレス）" style="flex:2; min-width:180px;">
+          <input id="quickMaker" list="makerOptions" placeholder="メーカー（任意）" style="flex:1; min-width:140px;">
+        </div>
+        <div class="row">
+          <input id="quickEqNo" placeholder="機材番号（任意）" style="flex:1; min-width:140px;">
+          <input id="quickSetup" placeholder="椅子/背中など設定（任意）" style="flex:1; min-width:180px;">
+        </div>
+        <div class="row">
+          <button id="btnQuickAdd" type="button" class="btn">入力して追加</button>
+          <button id="btnQuickClear" type="button" class="btn ghost">クリア</button>
+        </div>
+      </div>
       <input id="pickSearch" class="search" placeholder="検索（例：ベンチ）">
       <div id="pickList" class="picklist"></div>
 
@@ -157,6 +172,10 @@
       </div>
 
       <div class="row">
+        <div class="field">
+          <label>メーカー</label>
+          <input id="meMaker" list="makerOptions" placeholder="例：Hammer Strength">
+        </div>
         <div class="field">
           <label>機材番号</label>
           <input id="meEqNo" placeholder="例：M-12">
@@ -212,6 +231,8 @@
     </form>
   </dialog>
 
+
+  <datalist id="makerOptions"></datalist>
 
   <script>
     window.__appjs_loaded = false;

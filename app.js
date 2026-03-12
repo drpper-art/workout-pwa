@@ -5,7 +5,7 @@ if ("serviceWorker" in navigator) {
 
 try{ window.__appjs_loaded = true; }catch{}
 
-const APP_VERSION = "v16.3";
+const APP_VERSION = "v16.4";
 
 
 // URLに ?nosw=1 を付けて開くと、Service Worker と Cache を解除してから再読み込みします（更新トラブル用）
@@ -143,7 +143,11 @@ async function setSettings(value){
 
 async function getAllMasters(){
   const rows = await idbAll(STORES.masters);
-  return rows.map(r=>r.value).sort((a,b)=>a.name.localeCompare(b.name,"ja"));
+  return rows.map(r=>({ manufacturer:"", ...r.value })).sort((a,b)=> {
+    const sa = `${a.splitId||""}	${a.name||""}	${a.manufacturer||""}`;
+    const sb = `${b.splitId||""}	${b.name||""}	${b.manufacturer||""}`;
+    return sa.localeCompare(sb, "ja");
+  });
 }
 async function getMaster(id){
   const r = await idbGet(STORES.masters, Keys.master(id));
@@ -246,6 +250,33 @@ function currentSplitName(){
   return state.splits.find(s=>s.id===state.splitId)?.name || "";
 }
 
+function normalizeText(v){
+  return String(v || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function fillMakerDatalist(){
+  const dl = el("makerOptions");
+  if (!dl) return;
+  dl.innerHTML = state.manufacturers.map(name => `<option value="${escapeAttr(name)}"></option>`).join("");
+}
+
+async function ensureManufacturerKnown(name){
+  const v = String(name || "").trim();
+  if (!v) return;
+  if (state.manufacturers.some(x => normalizeText(x) === normalizeText(v))) return;
+  state.manufacturers.push(v);
+  state.manufacturers.sort((a,b)=>a.localeCompare(b, "ja"));
+  await persistSettings();
+  fillMakerDatalist();
+}
+
+function findMasterInCurrentSplit(name, manufacturer){
+  const splitId = state.splitId || "";
+  const nn = normalizeText(name);
+  const nm = normalizeText(manufacturer);
+  return state.masters.find(m => (m.splitId || "") === splitId && normalizeText(m.name) === nn && normalizeText(m.manufacturer || "") === nm) || null;
+}
+
 function updateLayoutMetrics(){
   const top = el("topBar") || document.querySelector("header.top");
   if (!top) return;
@@ -329,7 +360,7 @@ async function addExerciseById(exId){
   const item = {
     id: uid(),
     exId,
-    manufacturer: last?.manufacturer || "",
+    manufacturer: last?.manufacturer || master?.manufacturer || "",
     equipmentNo,
     setup,
     comment,
@@ -588,12 +619,26 @@ function openPicker(){
   const list = el("pickList");
   const search = el("pickSearch");
   const hint = el("pickCurrentSplitHint");
+  const qName = el("quickName");
+  const qMaker = el("quickMaker");
+  const qEqNo = el("quickEqNo");
+  const qSetup = el("quickSetup");
+  const btnQuickAdd = el("btnQuickAdd");
+  const btnQuickClear = el("btnQuickClear");
   search.value = "";
+  if (qName) qName.value = "";
+  if (qMaker) qMaker.value = "";
+  if (qEqNo) qEqNo.value = "";
+  if (qSetup) qSetup.value = "";
+  fillMakerDatalist();
   if (hint) hint.textContent = `現在の部位: ${currentSplitName()} の種目だけ表示`;
   const renderList = ()=>{
     const q = search.value.trim().toLowerCase();
     list.innerHTML = "";
-    const filtered = mastersForCurrentSplit().filter(m => m.name.toLowerCase().includes(q));
+    const filtered = mastersForCurrentSplit().filter(m => {
+      const hay = [m.name, m.manufacturer || "", m.equipmentNo || "", m.setup || ""].join(" ").toLowerCase();
+      return hay.includes(q);
+    });
     if (filtered.length === 0){
       list.innerHTML = `<div class="hint">この部位の種目がありません。種目マスタで追加できます。</div>`;
       return;
@@ -605,6 +650,7 @@ function openPicker(){
         <div class="name">${escapeHtml(m.name)}</div>
         <div class="sub">
           <strong>${escapeHtml(splitNameOfMaster(m))}</strong>
+          ${m.manufacturer ? ` ・ メーカー <strong>${escapeHtml(m.manufacturer)}</strong>` : ``}
           ${m.equipmentNo ? ` ・ 機材 <strong>${escapeHtml(m.equipmentNo)}</strong>` : ``}
           ${m.setup ? ` ・ 設定 <strong>${escapeHtml(m.setup)}</strong>` : ``}
         </div>
@@ -618,6 +664,34 @@ function openPicker(){
     }
   };
   search.oninput = renderList;
+  if (btnQuickClear) btnQuickClear.onclick = ()=>{
+    if (qName) qName.value = "";
+    if (qMaker) qMaker.value = "";
+    if (qEqNo) qEqNo.value = "";
+    if (qSetup) qSetup.value = "";
+    if (qName) qName.focus();
+  };
+  if (btnQuickAdd) btnQuickAdd.onclick = async ()=>{
+    const name = qName?.value.trim() || "";
+    const manufacturer = qMaker?.value.trim() || "";
+    const equipmentNo = qEqNo?.value.trim() || "";
+    const setup = qSetup?.value.trim() || "";
+    if (!name){ alert("種目名を入力してね"); qName?.focus(); return; }
+    await ensureManufacturerKnown(manufacturer);
+    await refreshMasters();
+    let master = findMasterInCurrentSplit(name, manufacturer);
+    if (!master){
+      master = { id: uid(), splitId: state.splitId, name, manufacturer, equipmentNo, setup, defaultComment:"" };
+    } else {
+      if (!master.equipmentNo && equipmentNo) master.equipmentNo = equipmentNo;
+      if (!master.setup && setup) master.setup = setup;
+      if (!master.manufacturer && manufacturer) master.manufacturer = manufacturer;
+    }
+    await upsertMaster(master);
+    await refreshMasters();
+    dlg.close();
+    await addExerciseById(master.id);
+  };
   renderList();
   dlg.showModal();
   const closeBtn = dlg.querySelector(".dlgmenu .btn.ghost");
@@ -652,13 +726,15 @@ async function openMaster(){
 function renderMasterList(){
   const list = el("masterList");
   list.innerHTML = "";
-  for (const m of state.masters){
+  const visible = mastersForCurrentSplit();
+  for (const m of visible){
     const div = document.createElement("div");
     div.className = "pickitem";
     div.innerHTML = `
       <div class="name">${escapeHtml(m.name)}</div>
       <div class="sub">
-        ${m.equipmentNo ? `機材 <strong>${escapeHtml(m.equipmentNo)}</strong>` : ``}
+        ${m.manufacturer ? `メーカー <strong>${escapeHtml(m.manufacturer)}</strong>` : ``}
+        ${m.equipmentNo ? ` ・ 機材 <strong>${escapeHtml(m.equipmentNo)}</strong>` : ``}
         ${m.setup ? ` ・ 設定 <strong>${escapeHtml(m.setup)}</strong>` : ``}
       </div>
       <button class="btn ghost" type="button">編集</button>
@@ -675,12 +751,14 @@ async function openMasterEdit(id){
   const isNew = !id;
   el("masterEditTitle").textContent = isNew ? "種目追加" : "種目編集";
 
-  let m = isNew ? { id: uid(), splitId: state.splitId, name:"", equipmentNo:"", setup:"", defaultComment:"" } : await getMaster(id);
-  if (!m) m = { id: uid(), splitId: state.splitId, name:"", equipmentNo:"", setup:"", defaultComment:"" };
+  let m = isNew ? { id: uid(), splitId: state.splitId, name:"", manufacturer:"", equipmentNo:"", setup:"", defaultComment:"" } : await getMaster(id);
+  if (!m) m = { id: uid(), splitId: state.splitId, name:"", manufacturer:"", equipmentNo:"", setup:"", defaultComment:"" };
+  m.manufacturer = m.manufacturer || "";
   if (!m.splitId || !state.splits.some(s=>s.id===m.splitId)) m.splitId = state.splitId;
 
   fillMasterSplitOptions(m.splitId);
   el("meName").value = m.name;
+  el("meMaker").value = m.manufacturer || "";
   el("meEqNo").value = m.equipmentNo || "";
   el("meSetup").value = m.setup || "";
   el("meComment").value = m.defaultComment || "";
@@ -693,6 +771,8 @@ async function openMasterEdit(id){
     if (!name){ alert("種目名を入力してね"); return; }
     m.splitId = el("meSplit").value || state.splitId;
     m.name = name;
+    m.manufacturer = el("meMaker").value.trim();
+    await ensureManufacturerKnown(m.manufacturer);
     m.equipmentNo = el("meEqNo").value.trim();
     m.setup = el("meSetup").value.trim();
     m.defaultComment = el("meComment").value.trim();
@@ -909,7 +989,7 @@ async function loadTemplate(){
     const unit = last?.unit || state.unitDisplay;
     const setsCount = clamp(t.sets || last?.sets?.length || 4, 1, 12);
 
-    const item = { id: uid(), exId: t.exId, manufacturer: last?.manufacturer || "", equipmentNo, setup, comment, unit, collapsed: false, sets: makeEmptySets(setsCount) };
+    const item = { id: uid(), exId: t.exId, manufacturer: last?.manufacturer || master?.manufacturer || "", equipmentNo, setup, comment, unit, collapsed: false, sets: makeEmptySets(setsCount) };
     if (last?.sets?.length){
       for (let i=0;i<Math.min(item.sets.length, last.sets.length);i++){
         item.sets[i].wKg = last.sets[i].wKg ?? null;
@@ -1180,6 +1260,7 @@ async function init(){
   state.unitDisplay = settings.unitDisplay || "kg";
   state.splits = Array.isArray(settings.splits) && settings.splits.length ? settings.splits : DEFAULT_SPLITS;
   state.manufacturers = Array.isArray(settings.manufacturers) ? settings.manufacturers : [];
+  fillMakerDatalist();
 
   unitButtonsReflect();
   renderSplitTabs();
